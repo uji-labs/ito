@@ -252,12 +252,13 @@ function LazyVStack:position(frame, room, scroll)
     if not index then
         return nil
     end
-    if scroll.pending < 0 then
+    local pending = scroll.pending
+    scroll.pending = 0
+    if pending < 0 then
         scroll.following = false
     end
-    index, sub, offset = self:shifted(frame, index, sub, offset, scroll.pending)
-    scroll.pending = 0
-    if not scroll.following and self:below(frame, index, sub, offset, room + 1) <= room then
+    index, sub, offset = self:shifted(frame, index, sub, offset, pending)
+    if (pending > 0 or not scroll.following) and self:below(frame, index, sub, offset, room + 1) <= room then
         scroll.following = true
         index, sub, offset = self:from_end(frame, room)
     end

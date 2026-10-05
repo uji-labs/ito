@@ -526,6 +526,24 @@ describe("the view controls", function()
         assert.same({ "short", "b1", "b2" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]) })
     end)
 
+    it("stays at the end of a lazy stack when scrolled down past it", function()
+        local s = screen.new(10, 3)
+        local items = {}
+        for index = 1, 10 do
+            items[index] = "row " .. index
+        end
+        local scroll = kit.ScrollState({ follow = true })
+        s:show(function()
+            return kit.LazyVStack(items, function(item)
+                return kit.Text(item)
+            end):state(scroll)
+        end)
+        scroll:scroll(5)
+        local rows = s:rows()
+        assert.same({ "row 8", "row 9", "row 10" }, { trimmed(rows[1]), trimmed(rows[2]), trimmed(rows[3]) })
+        assert.is_true(scroll.following)
+    end)
+
     it("leaves a lazy stack's rows alone while nothing they show changes", function()
         local s = screen.new(10, 3)
         local items = { "a", "b", "c" }
