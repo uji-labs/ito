@@ -10,6 +10,16 @@ function Host:init(content)
     View.init(self, { content })
 end
 
+function Host:content_height(frame, width)
+    local content = self.composed[1]
+    return content and content:measure(frame, width) or 0
+end
+
+function Host:content_width(frame)
+    local content = self.composed[1]
+    return content and content:natural_width(frame)
+end
+
 local function gather(view, found, root)
     if not root and getmetatable(view) == Host then
         return

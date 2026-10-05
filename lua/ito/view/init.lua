@@ -6,20 +6,10 @@ local scope = require("ito.runtime.scope")
 local View = class(runtime.Primitive)
 
 View.Edges = { all = {}, horizontal = {} }
-View.Side = { top = "top", bottom = "bottom", left = "left", right = "right" }
 View.Alignment = require("ito.view.alignment").Alignment
 View.alignment_of = require("ito.view.alignment").of
 
-local SIDES = {}
-for _, side in pairs(View.Side) do
-    SIDES[side] = true
-end
-
-function View.vertical(side)
-    return side == View.Side.top or side == View.Side.bottom
-end
-
-require("ito.view.modifiers")(View, SIDES)
+require("ito.view.modifiers")(View)
 
 function View:chrome()
     local top, left = self.pad_y or 0, self.pad_x or 0

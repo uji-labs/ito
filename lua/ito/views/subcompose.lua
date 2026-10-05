@@ -39,11 +39,6 @@ function SubcomposeLayout:content_height(frame, width)
     return view and view:measure(frame, width) or 0
 end
 
-function SubcomposeLayout:content_width(frame)
-    local view = self:content({})
-    return view and view:natural_width(frame)
-end
-
 function SubcomposeLayout:arrange(frame, inner)
     local view = self:content({ width = inner.width, height = inner.height })
     self.composed = { view }

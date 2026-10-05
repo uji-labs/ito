@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::io;
 
-use mlua::{Function, UserData, UserDataMethods, Value};
+use mlua::{Function, LuaString, UserData, UserDataMethods, Value};
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
@@ -21,7 +22,7 @@ use targets::Targets;
 
 pub struct Screen {
     surface: Box<dyn Surface>,
-    styles: Vec<Option<Style>>,
+    styles: HashMap<usize, Style>,
     cursor: Option<Cursor>,
     targets: Targets,
 }
@@ -30,7 +31,7 @@ impl Screen {
     pub(crate) fn new(surface: Box<dyn Surface>) -> Self {
         Self {
             surface,
-            styles: Vec::new(),
+            styles: HashMap::new(),
             cursor: None,
             targets: Targets::default(),
         }
@@ -39,6 +40,7 @@ impl Screen {
     #[must_use]
     pub fn forget(mut self) -> Self {
         self.targets.clear();
+        self.styles.clear();
         self
     }
 
@@ -57,17 +59,12 @@ impl Screen {
                 .into());
             }
         };
-        let Some(id) = style.raw_get::<Option<usize>>("id")? else {
-            return Err(io::Error::other("a style is an ito.TextStyle, not a plain table").into());
-        };
-        if let Some(Some(found)) = self.styles.get(id) {
+        let address = style.to_pointer() as usize;
+        if let Some(found) = self.styles.get(&address) {
             return Ok(*found);
         }
         let found = text_style(style)?;
-        if self.styles.len() <= id {
-            self.styles.resize(id + 1, None);
-        }
-        self.styles[id] = Some(found);
+        self.styles.insert(address, found);
         Ok(found)
     }
 
@@ -87,7 +84,7 @@ impl Screen {
         let (text, style) = match span {
             Value::String(text) => (text, Style::default()),
             Value::Table(span) => (
-                span.raw_get::<mlua::LuaString>(1)?,
+                span.raw_get::<LuaString>(1)?,
                 self.resolve(&span.raw_get::<Value>(2)?)?,
             ),
             other => {
@@ -278,7 +275,7 @@ impl UserData for Screen {
             },
         );
         methods.add_method_mut("flush", |_, screen, ()| screen.flush().map_err(raised));
-        methods.add_method_mut("write", |_, screen, bytes: mlua::LuaString| {
+        methods.add_method_mut("write", |_, screen, bytes: LuaString| {
             screen.write(&bytes.as_bytes()).map_err(raised)
         });
         methods.add_method_mut("suspend", |_, screen, ()| screen.suspend().map_err(raised));

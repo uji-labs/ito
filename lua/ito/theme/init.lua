@@ -25,19 +25,16 @@ function Theme:load(name)
         return self.default
     end
     local found = self.loader(name)
-    if type(found) == "function" then
-        found = found()
-    end
     if type(found) ~= "table" then
-        error("theme " .. name .. " must return a theme or a function that builds one", 0)
+        error("theme " .. name .. " must return a table", 0)
     end
     return found
 end
 
 function Theme:build(selection)
-    local named = type(selection) == "string"
-    local theme = named and self:load(selection) or selection
-    return schema.check(theme, self.default, named and "theme " .. selection or "theme")
+    local theme = type(selection) == "string" and self:load(selection) or selection
+    local name = type(selection) == "string" and selection or type(theme) == "table" and theme.name
+    return schema.check(theme, self.default, type(name) == "string" and "theme " .. name or "theme")
 end
 
 function Theme:use(selection, tokens)
@@ -73,14 +70,14 @@ function Theme:element(ctx, name, data, width)
     return fallback
 end
 
-local function strict(values, what)
+local function strict(values)
     local copy = {}
     for name, value in pairs(values) do
         copy[name] = value
     end
     return setmetatable(copy, {
         __index = function(_, name)
-            error("the theme has no " .. what .. " named " .. tostring(name), 2)
+            error("the theme has no style named " .. tostring(name), 2)
         end,
     })
 end
@@ -93,8 +90,8 @@ function Theme:context()
     self.built = self.revision
     self.reported = self.reported or {}
     self.ctx = {
-        styles = strict(tokens.styles, "style"),
-        colors = strict(tokens.colors, "color"),
+        styles = strict(tokens.styles),
+        colors = tokens.colors,
         symbols = tokens.symbols,
         borders = tokens.borders,
         text = tokens.text,

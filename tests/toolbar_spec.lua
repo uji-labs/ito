@@ -55,6 +55,21 @@ describe("toolbars", function()
         assert.equal("first", trimmed(rows[7]))
     end)
 
+    it("takes the height of its content inside a stack", function()
+        local s = screen.new(20, 4)
+        local rows = s:show(function()
+            return ito.VStack({
+                ito.ToolbarHost(ito.VStack({ ito.Text("inner"), ito.ToolbarItems(placement.bottom_bar) })):toolbar({
+                    ito.ToolbarItem(placement.bottom_bar, text("bar")),
+                }),
+                ito.Text("after"),
+            })
+        end)
+        assert.equal("inner", trimmed(rows[1]))
+        assert.equal("bar", trimmed(rows[2]))
+        assert.equal("after", trimmed(rows[3]))
+    end)
+
     it("gives a section no room while it has no items", function()
         local s = screen.new(20, 3)
         local rows = s:show(function()

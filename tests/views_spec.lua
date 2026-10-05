@@ -43,15 +43,15 @@ describe("the view kit", function()
         assert.equal("a   b         c", trimmed(rows[1]))
     end)
 
-    it("takes modifiers on a view of its own and floats a view in a dock", function()
+    it("takes modifiers on a view of its own and layers views in a ZStack", function()
         local s = screen.new(20, 6)
         local Label = kit.view(function(props)
             return kit.Text(props.text)
         end)
         local rows = s:show(function(ctx)
-            return kit.Dock({
-                Label({ text = "low" }):dock(kit.Side.bottom),
-                Label({ text = "box" }):border(ctx.borders.plain):float({ width = 7, height = 3 }),
+            return kit.ZStack({
+                Label({ text = "low" }):align(kit.Alignment.bottom_leading),
+                Label({ text = "box" }):border(ctx.borders.plain):width(7):height(3),
             })
         end)
         assert.equal("low", trimmed(rows[6]))

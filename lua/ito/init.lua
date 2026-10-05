@@ -40,7 +40,6 @@ M.Frame = Frame
 M.View = View
 M.Edges = View.Edges
 M.Alignment = View.Alignment
-M.Side = View.Side
 M.setup = host.setup
 M.open = tty.open
 

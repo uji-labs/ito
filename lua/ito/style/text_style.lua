@@ -11,15 +11,26 @@ for _, flag in ipairs(FLAGS) do
     FLAG[flag] = true
 end
 
-local TextStyle = {}
-TextStyle.__index = TextStyle
+local fields_of, made, merges = {}, {}, {}
 
-function TextStyle.__newindex()
-    error("an ito.TextStyle cannot change; merge makes a new one", 2)
+local TextStyle = {}
+
+local Meta = {
+    __name = "ito.TextStyle",
+    __metatable = "ito.TextStyle",
+}
+
+function Meta.__index(style, key)
+    local value = fields_of[style][key]
+    if value ~= nil then
+        return value
+    end
+    return TextStyle[key]
 end
 
-local made, merges = {}, {}
-local count = 0
+function Meta.__newindex()
+    error("an ito.TextStyle cannot change; merge makes a new one", 2)
+end
 
 local function key(fields)
     local parts = {
@@ -36,12 +47,13 @@ local function intern(fields)
     local name = key(fields)
     local found = made[name]
     if not found then
-        count = count + 1
-        found = { id = count, foreground = fields.foreground, background = fields.background }
+        local own = { foreground = fields.foreground, background = fields.background }
         for _, flag in ipairs(FLAGS) do
-            found[flag] = fields[flag] or nil
+            own[flag] = fields[flag] or nil
         end
-        made[name] = setmetatable(found, TextStyle)
+        found = setmetatable({}, Meta)
+        fields_of[found] = own
+        made[name] = found
     end
     return found
 end
@@ -69,7 +81,7 @@ function TextStyle:merge(other)
     if other == nil then
         return self
     end
-    if getmetatable(other) ~= TextStyle then
+    if fields_of[other] == nil then
         error("merge takes an ito.TextStyle, not a " .. type(other), 2)
     end
     local cache = merges[self]
@@ -101,11 +113,11 @@ M.TextStyle = setmetatable({}, {
 M.plain = intern({})
 
 function M.is(value)
-    return getmetatable(value) == TextStyle
+    return fields_of[value] ~= nil
 end
 
 function M.check(value, what, level)
-    if getmetatable(value) ~= TextStyle then
+    if fields_of[value] == nil then
         error(what .. " must be an ito.TextStyle, not a " .. type(value), (level or 2) + 1)
     end
     return value

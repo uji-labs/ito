@@ -21,22 +21,32 @@ local NAMES = {
 
 local INDEXES = 255
 
-local Color = {}
+local specs, made = {}, {}
 
-function Color.__tostring(color)
-    return color.spec
+local Color = {
+    __name = "ito.Color",
+    __metatable = "ito.Color",
+}
+
+function Color.__index(color, key)
+    if key == "spec" then
+        return specs[color]
+    end
 end
 
 function Color.__newindex()
     error("an ito.Color cannot change", 2)
 end
 
-local made = {}
+function Color.__tostring(color)
+    return specs[color]
+end
 
 local function make(spec)
     local found = made[spec]
     if not found then
-        found = setmetatable({ spec = spec }, Color)
+        found = setmetatable({}, Color)
+        specs[found] = spec
         made[spec] = found
     end
     return found
@@ -52,7 +62,7 @@ function M.Color.indexed(number)
     if type(number) ~= "number" or number % 1 ~= 0 or number < 0 or number > INDEXES then
         error("ito.Color.indexed takes a whole number from 0 to " .. INDEXES .. ", not " .. tostring(number), 2)
     end
-    return make(tostring(number))
+    return make(string.format("%d", number))
 end
 
 function M.rgb(value)
@@ -63,11 +73,11 @@ function M.rgb(value)
 end
 
 function M.is(value)
-    return getmetatable(value) == Color
+    return specs[value] ~= nil
 end
 
 function M.check(value, what, level)
-    if getmetatable(value) ~= Color then
+    if specs[value] == nil then
         error(what .. " must be an ito.Color, not a " .. type(value), (level or 2) + 1)
     end
     return value

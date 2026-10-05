@@ -13,25 +13,7 @@ end
 
 local EDGES = { "top_left", "top_right", "bottom_left", "bottom_right", "horizontal", "vertical" }
 
-local FULL = 100
-local SHARE = "^%s*(%d+)%s*%%%s*$"
-local FLOATING = { percent = 80 }
-
-local function extent(value, what)
-    if value == nil then
-        return FLOATING
-    end
-    if type(value) == "number" then
-        return { cells = whole(value, what) }
-    end
-    local percent = type(value) == "string" and tonumber(value:match(SHARE))
-    if not percent or percent < 1 or percent > FULL then
-        error(what .. ' takes a number of cells or a share such as "80%", not ' .. tostring(value), 3)
-    end
-    return { percent = percent }
-end
-
-return function(View, SIDES)
+return function(View)
     function View:padding(amount)
         if type(amount) == "table" then
             self.pad_y = whole(amount.vertical or 0, "vertical padding")
@@ -96,23 +78,6 @@ return function(View, SIDES)
             error("share takes a fraction from 0 to 1, not " .. tostring(fraction), 2)
         end
         self.fraction = fraction
-        return self
-    end
-
-    function View:dock(side)
-        if not SIDES[side] then
-            error("dock takes Side.top, Side.bottom, Side.left or Side.right", 2)
-        end
-        self.side = side
-        return self
-    end
-
-    function View:float(size)
-        size = size or {}
-        if type(size) ~= "table" then
-            error("float takes a table with width and height", 2)
-        end
-        self.floating = { width = extent(size.width, "float width"), height = extent(size.height, "float height") }
         return self
     end
 
