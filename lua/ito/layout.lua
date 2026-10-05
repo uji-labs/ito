@@ -1,9 +1,5 @@
 local M = {}
 
-M.SPLITS = { top = true, bottom = true, left = true, right = true }
-M.BORDERS = { none = true, plain = true, rounded = true, horizontal = true }
-M.PRIORITY = 50
-
 local function vertical(split)
     return split == "top" or split == "bottom"
 end

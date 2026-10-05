@@ -26,6 +26,8 @@ local REFERENCE = "^{palette%.([%w_]+)}$"
 
 local FLAGS = { "bold", "dim", "italic", "underline", "reverse", "strikethrough", "blink" }
 
+M.FLAGS = FLAGS
+
 local FLAG = {}
 for _, flag in ipairs(FLAGS) do
     FLAG[flag] = true

@@ -1,6 +1,6 @@
 local class = require("ito.class")
 
-local FLAGS = { "bold", "dim", "italic", "underline", "reverse", "strikethrough", "blink" }
+local FLAGS = require("ito.theme.schema").FLAGS
 
 local function key_of(spec)
     local parts = { spec.fg or "", spec.bg or "" }
@@ -23,8 +23,6 @@ end
 
 local Styles = class()
 
-Styles.key_of = key_of
-
 function Styles:init(screen)
     self.screen = screen
     self.ids = {}
@@ -36,7 +34,7 @@ function Styles:get(spec)
     if spec == nil then
         return 0
     end
-    local key = spec.key or key_of(spec)
+    local key = key_of(spec)
     local id = self.ids[key]
     if not id then
         local clean = {}

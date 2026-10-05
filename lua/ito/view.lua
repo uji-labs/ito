@@ -22,6 +22,24 @@ local function whole(value, what)
     return value
 end
 
+local FULL = 100
+local SHARE = "^%s*(%d+)%s*%%%s*$"
+local FLOATING = { percent = 80 }
+
+local function extent(value, what)
+    if value == nil then
+        return FLOATING
+    end
+    if type(value) == "number" then
+        return { cells = whole(value, what) }
+    end
+    local percent = type(value) == "string" and tonumber(value:match(SHARE))
+    if not percent or percent < 1 or percent > FULL then
+        error(what .. ' takes a number of cells or a share such as "80%", not ' .. tostring(value), 3)
+    end
+    return { percent = percent }
+end
+
 function View:padding(amount)
     if type(amount) == "table" then
         self.pad_y = whole(amount.vertical or 0, "vertical padding")
@@ -97,11 +115,12 @@ function View:dock(side)
     return self
 end
 
-function View:priority(order)
-    if type(order) ~= "number" then
-        error("priority takes a number, not " .. tostring(order), 2)
+function View:float(size)
+    size = size or {}
+    if type(size) ~= "table" then
+        error("float takes a table with width and height", 2)
     end
-    self.order = order
+    self.floating = { width = extent(size.width, "float width"), height = extent(size.height, "float height") }
     return self
 end
 
@@ -211,5 +230,7 @@ function View:draw(frame)
         frame:clickable(self.rect, self.click)
     end
 end
+
+runtime.modifiers = View
 
 return View

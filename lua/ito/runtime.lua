@@ -2,6 +2,8 @@ local class = require("ito.class")
 
 local M = {}
 
+local unpack = table.unpack or unpack
+
 local current
 local EMPTY = {}
 
@@ -32,8 +34,13 @@ end
 
 local State = {}
 
+local WEAK = { __mode = "k" }
+
 State.__index = function(self, key)
     if key == "value" then
+        if current then
+            rawget(self, "readers")[current.composition] = true
+        end
         return rawget(self, "current")
     end
 end
@@ -44,19 +51,29 @@ State.__newindex = function(self, key, value)
     end
     if rawget(self, "current") ~= value then
         rawset(self, "current", value)
-        rawget(self, "composition"):invalidate()
+        for composition in pairs(rawget(self, "readers")) do
+            composition:invalidate()
+        end
     end
+end
+
+local function fresh(initial, owner)
+    local readers = setmetatable({}, WEAK)
+    if owner then
+        readers[owner] = true
+    end
+    return setmetatable({ current = initial, readers = readers }, State)
 end
 
 function M.state(initial)
     local node = current
     if not node then
-        error("ito.state works only inside a view while it is composed", 2)
+        return fresh(initial)
     end
     node.hook = node.hook + 1
     local state = node.states[node.hook]
     if not state then
-        state = setmetatable({ current = initial, composition = node.composition }, State)
+        state = fresh(initial, node.composition)
         node.states[node.hook] = state
     end
     return state
@@ -76,6 +93,10 @@ function M.remember(factory)
     return slot.kept
 end
 
+function M.is_view(value)
+    return type(value) == "table" and type(value.compose) == "function"
+end
+
 local Local = {}
 
 Local.__index = function(self, key)
@@ -92,6 +113,10 @@ end
 
 function M.Local(default)
     return setmetatable({ default = default }, Local)
+end
+
+function Local:set(value)
+    rawset(self, "default", value)
 end
 
 M.Theme = M.Local(nil)
@@ -115,10 +140,27 @@ end
 
 local Call = class()
 
+Call.__index = function(_, key)
+    local own = Call[key]
+    if own ~= nil then
+        return own
+    end
+    local modifier = M.modifiers and M.modifiers[key]
+    if type(modifier) ~= "function" then
+        return nil
+    end
+    return function(self, ...)
+        local pending = rawget(self, "pending")
+        pending[#pending + 1] = { modifier, select("#", ...), ... }
+        return self
+    end
+end
+
 function Call:init(view, props)
     self.view = view
     self.props = props or {}
     self.key = self.props.key
+    self.pending = {}
 end
 
 function Call:compose(composition, node, environment)
@@ -132,7 +174,13 @@ function Call:compose(composition, node, environment)
     if not ok then
         error(result, 0)
     end
-    return composition:place(result, node, 1, environment)
+    local placed = composition:place(result, node, 1, environment)
+    if placed then
+        for _, change in ipairs(self.pending) do
+            change[1](placed, unpack(change, 3, change[2] + 2))
+        end
+    end
+    return placed
 end
 
 local View = {}
@@ -167,16 +215,16 @@ function Primitive:init(props)
     self.props = props
     self.key = props.key
     self.children = {}
-    for index = 1, table.maxn(props) do
-        self.children[index] = props[index]
+    for index, child in ipairs(props) do
+        self.children[index] = child
     end
 end
 
 function Primitive:compose(composition, node, environment)
     self.memo = node.memo
     local composed = {}
-    for index = 1, table.maxn(self.children) do
-        local child = composition:place(self.children[index], node, index, environment)
+    for index, element in ipairs(self.children) do
+        local child = composition:place(element, node, index, environment)
         if child then
             composed[#composed + 1] = child
         end
@@ -219,7 +267,7 @@ function Composition:place(element, parent, index, environment)
     if not element then
         return nil
     end
-    if type(element) ~= "table" or type(element.compose) ~= "function" then
+    if not M.is_view(element) then
         error("a view must give a view, not a " .. type(element), 0)
     end
     local slots, slot = parent.children, index

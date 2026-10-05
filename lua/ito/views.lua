@@ -6,7 +6,31 @@ local View = require("ito.view")
 
 local M = {}
 
-local FLAGS = { "bold", "dim", "italic", "underline", "reverse", "strikethrough", "blink" }
+local Side = View.Side
+local LATER = { [Side.bottom] = true, [Side.right] = true }
+
+local function vertical(side)
+    return side == Side.top or side == Side.bottom
+end
+
+local function insert(list, anchor, item, spot)
+    local at
+    for index, child in ipairs(list) do
+        if child == anchor then
+            at = index
+            break
+        end
+    end
+    local index
+    if spot.before then
+        index = spot.prepend and at - spot.count or at
+    else
+        index = spot.prepend and at + 1 or at + spot.count + 1
+    end
+    table.insert(list, index, item)
+end
+
+local FLAGS = schema.FLAGS
 
 local function widest(rows)
     local most = 0
@@ -74,6 +98,35 @@ end
 
 function HStack:arrange(frame)
     stacked(self, frame, false)
+end
+
+local function beside(container, item, anchor, toward)
+    local wrap = (vertical(toward) and VStack or HStack)({})
+    wrap.composed = { anchor }
+    wrap.side, wrap.weight, wrap.fraction = anchor.side, anchor.weight, anchor.fraction
+    wrap.fixed_height, wrap.fixed_width = anchor.fixed_height, anchor.fixed_width
+    for index, child in ipairs(container.composed) do
+        if child == anchor then
+            container.composed[index] = wrap
+        end
+    end
+    return wrap:adopt(item, anchor, toward, 0)
+end
+
+function VStack:adopt(item, anchor, toward, count)
+    if not vertical(toward) then
+        return beside(self, item, anchor, toward)
+    end
+    insert(self.composed, anchor, item, { before = toward == Side.top, count = count })
+    return true
+end
+
+function HStack:adopt(item, anchor, toward, count)
+    if vertical(toward) then
+        return beside(self, item, anchor, toward)
+    end
+    insert(self.composed, anchor, item, { before = toward == Side.left, count = count })
+    return true
 end
 
 local Spacer = class(View)
@@ -152,38 +205,15 @@ function Lines:draw_content(frame)
     frame:lines(self.inner, self.rows)
 end
 
-local function ordered(items)
-    for index, item in ipairs(items) do
-        item.position = index
-    end
-    table.sort(items, function(a, b)
-        local left, right = a.order or layout.PRIORITY, b.order or layout.PRIORITY
-        if left ~= right then
-            return left < right
-        end
-        return a.position < b.position
-    end)
-    return items
-end
-
 local Dock = class(View)
 M.Dock = Dock
 
 function Dock:arrange(frame, inner)
-    local items = {}
-    for _, child in ipairs(self.composed) do
-        if child.expand then
-            for _, item in ipairs(child:expand(frame)) do
-                items[#items + 1] = item
-            end
-        else
-            items[#items + 1] = child
-        end
-    end
+    local items = self.composed
     local entries, natural = {}, {}
-    for index, item in ipairs(ordered(items)) do
-        local split = item.side or View.Side.top
-        local down = split == View.Side.top or split == View.Side.bottom
+    for index, item in ipairs(items) do
+        local split = item.side or Side.top
+        local down = vertical(split)
         local total = down and inner.height or inner.width
         local fixed = down and item.fixed_height or item.fixed_width
         local extent = fixed
@@ -195,7 +225,7 @@ function Dock:arrange(frame, inner)
             extent = 0
             natural[index] = true
         end
-        entries[index] = { split = split, float = item.float, extent = extent }
+        entries[index] = { split = split, float = item.floating, extent = extent }
     end
     local rects = layout.dock(inner, entries)
     for index, item in ipairs(items) do
@@ -210,16 +240,89 @@ function Dock:arrange(frame, inner)
     self.items = items
 end
 
+function Dock:adopt(item, anchor, toward, count)
+    local side = anchor.side or Side.top
+    if vertical(side) ~= vertical(toward) then
+        return beside(self, item, anchor, toward)
+    end
+    item.side = side
+    insert(self.composed, anchor, item, { before = toward == side, prepend = LATER[side], count = count })
+    return true
+end
+
 function Dock:draw(frame)
     if self:framed() then
         frame:chrome(self)
     end
-    for _, item in ipairs(self.items or {}) do
-        item:draw(frame)
+    for _, floating in ipairs({ false, true }) do
+        for _, item in ipairs(self.items or {}) do
+            if (item.floating ~= nil) == floating then
+                item:draw(frame)
+            end
+        end
     end
     if self.click then
         frame:clickable(self.rect, self.click)
     end
+end
+
+local Anchor = class()
+
+function Anchor:init(toward, id)
+    if id == nil then
+        error("an anchor needs the id of a view, or a view class", 3)
+    end
+    self.toward = toward
+    self.id = id
+end
+
+function M.above(id)
+    return Anchor(Side.top, id)
+end
+
+function M.below(id)
+    return Anchor(Side.bottom, id)
+end
+
+function M.left_of(id)
+    return Anchor(Side.left, id)
+end
+
+function M.right_of(id)
+    return Anchor(Side.right, id)
+end
+
+function M.is_anchor(value)
+    return getmetatable(value) == Anchor
+end
+
+local function find(parent, id)
+    for _, child in ipairs(parent.composed or {}) do
+        if child.key == id or getmetatable(child) == id then
+            return parent, child
+        end
+        local found, anchor = find(child, id)
+        if found then
+            return found, anchor
+        end
+    end
+end
+
+function M.attach(root, entries)
+    local counts, missed = {}, {}
+    for _, entry in ipairs(entries) do
+        local toward, id = entry.anchor.toward, entry.anchor.id
+        local parent, target = find(root, id)
+        local group = target and (counts[target] or {})
+        local count = group and group[toward] or 0
+        if parent and parent.adopt and parent:adopt(entry.view, target, toward, count) then
+            counts[target] = group
+            group[toward] = count + 1
+        else
+            missed[#missed + 1] = entry
+        end
+    end
+    return missed
 end
 
 return M
