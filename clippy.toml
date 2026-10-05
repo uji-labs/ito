@@ -1,0 +1,22 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+
+avoid-breaking-exported-api = false
+
+cognitive-complexity-threshold = 15
+too-many-lines-threshold = 100
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250
+excessive-nesting-threshold = 7
+
+disallowed-methods = [
+  { path = "std::process::exit", reason = "return an error and let the caller decide" },
+  { path = "std::mem::forget", reason = "leaks; use ManuallyDrop if that is really the intent" },
+  { path = "std::env::set_var", reason = "process-global and unsound across threads" },
+  { path = "std::env::remove_var", reason = "process-global and unsound across threads" },
+]
+
+disallowed-types = [
+  { path = "std::sync::Mutex", reason = "the runtime is single-threaded with Rc/RefCell; a Mutex here is a design smell" },
+]

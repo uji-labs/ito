@@ -1,0 +1,242 @@
+local class = require("ito.class")
+
+local M = {}
+
+local current
+local EMPTY = {}
+
+local Node = class()
+
+function Node:init(kind)
+    self.kind = kind
+    self.children = {}
+    self.keyed = {}
+    self.states = {}
+    self.memo = {}
+    self.hook = 0
+    self.seen = 0
+end
+
+function Node:sweep(generation)
+    for index, child in pairs(self.children) do
+        if child.seen ~= generation then
+            self.children[index] = nil
+        end
+    end
+    for key, child in pairs(self.keyed) do
+        if child.seen ~= generation then
+            self.keyed[key] = nil
+        end
+    end
+end
+
+local State = {}
+
+State.__index = function(self, key)
+    if key == "value" then
+        return rawget(self, "current")
+    end
+end
+
+State.__newindex = function(self, key, value)
+    if key ~= "value" then
+        error("a state only has a value", 2)
+    end
+    if rawget(self, "current") ~= value then
+        rawset(self, "current", value)
+        rawget(self, "composition"):invalidate()
+    end
+end
+
+function M.state(initial)
+    local node = current
+    if not node then
+        error("ito.state works only inside a view while it is composed", 2)
+    end
+    node.hook = node.hook + 1
+    local state = node.states[node.hook]
+    if not state then
+        state = setmetatable({ current = initial, composition = node.composition }, State)
+        node.states[node.hook] = state
+    end
+    return state
+end
+
+function M.remember(factory)
+    local node = current
+    if not node then
+        error("ito.remember works only inside a view while it is composed", 2)
+    end
+    node.hook = node.hook + 1
+    local slot = node.states[node.hook]
+    if not slot then
+        slot = { kept = factory() }
+        node.states[node.hook] = slot
+    end
+    return slot.kept
+end
+
+local Local = {}
+
+Local.__index = function(self, key)
+    if key == "current" then
+        local environment = current and current.environment or EMPTY
+        local value = environment[self]
+        if value == nil then
+            return rawget(self, "default")
+        end
+        return value
+    end
+    return Local[key]
+end
+
+function M.Local(default)
+    return setmetatable({ default = default }, Local)
+end
+
+M.Theme = M.Local(nil)
+
+local Provide = class()
+
+function Provide:init(owner, value, child)
+    self.owner = owner
+    self.value = value
+    self.child = child
+end
+
+function Provide:compose(composition, node, environment)
+    local inner = setmetatable({ [self.owner] = self.value }, { __index = environment })
+    return composition:place(self.child, node, 1, inner)
+end
+
+function Local:provide(value, child)
+    return Provide(self, value, child)
+end
+
+local Call = class()
+
+function Call:init(view, props)
+    self.view = view
+    self.props = props or {}
+    self.key = self.props.key
+end
+
+function Call:compose(composition, node, environment)
+    local outer = current
+    current = node
+    node.hook = 0
+    node.composition = composition
+    node.environment = environment
+    local ok, result = pcall(self.view.body, self.props)
+    current = outer
+    if not ok then
+        error(result, 0)
+    end
+    return composition:place(result, node, 1, environment)
+end
+
+local View = {}
+View.__index = View
+
+View.__call = function(self, props)
+    return Call(self, props)
+end
+
+function M.view(body)
+    if type(body) ~= "function" then
+        error("ito.view needs a function that returns a view", 2)
+    end
+    return setmetatable({ body = body }, View)
+end
+
+function M.body(content)
+    if getmetatable(content) == View then
+        return content
+    end
+    return M.view(function()
+        return content()
+    end)
+end
+
+local Primitive = class()
+
+M.Primitive = Primitive
+
+function Primitive:init(props)
+    props = props or {}
+    self.props = props
+    self.key = props.key
+    self.children = {}
+    for index = 1, table.maxn(props) do
+        self.children[index] = props[index]
+    end
+end
+
+function Primitive:compose(composition, node, environment)
+    self.memo = node.memo
+    local composed = {}
+    for index = 1, table.maxn(self.children) do
+        local child = composition:place(self.children[index], node, index, environment)
+        if child then
+            composed[#composed + 1] = child
+        end
+    end
+    self.composed = composed
+    return self
+end
+
+local function kind(element)
+    return element.view or getmetatable(element)
+end
+
+local Composition = class()
+
+M.Composition = Composition
+
+function Composition:init(invalidate)
+    self.root = Node()
+    self.generation = 0
+    self.notify = invalidate
+    self.dirty = true
+end
+
+function Composition:invalidate()
+    self.dirty = true
+    if self.notify then
+        self.notify()
+    end
+end
+
+function Composition:compose(element)
+    self.generation = self.generation + 1
+    self.dirty = false
+    local composed = self:place(element, self.root, 1, EMPTY)
+    self.root:sweep(self.generation)
+    return composed
+end
+
+function Composition:place(element, parent, index, environment)
+    if not element then
+        return nil
+    end
+    if type(element) ~= "table" or type(element.compose) ~= "function" then
+        error("a view must give a view, not a " .. type(element), 0)
+    end
+    local slots, slot = parent.children, index
+    if element.key ~= nil then
+        slots, slot = parent.keyed, element.key
+    end
+    local node = slots[slot]
+    if not node or node.kind ~= kind(element) then
+        node = Node(kind(element))
+        slots[slot] = node
+    end
+    node.seen = self.generation
+    local composed = element:compose(self, node, environment)
+    if not node.lazy then
+        node:sweep(self.generation)
+    end
+    return composed
+end
+
+return M
