@@ -28,8 +28,10 @@ local VStack = class(View)
 function VStack:content_height(frame, width)
     local total = 0
     for _, child in ipairs(self.composed or {}) do
-        if not child.weight and not child.fraction then
-            total = total + (child.fixed_height or child:measure(frame, width))
+        if child.fixed_height then
+            total = total + child.fixed_height
+        elseif not child.weight and not child.fraction then
+            total = total + child:measure(frame, width)
         end
     end
     return total
@@ -42,9 +44,15 @@ end
 local HStack = class(View)
 
 function HStack:content_height(frame, width)
+    local row = layout.rect(0, 0, width, 0)
+    local extents = {}
+    for index, child in ipairs(self.composed or {}) do
+        extents[index] = child:extent(frame, row, false)
+    end
+    local rects = layout.stack(row, extents, false)
     local most = 0
-    for _, child in ipairs(self.composed or {}) do
-        most = math.max(most, child:measure(frame, width))
+    for index, child in ipairs(self.composed or {}) do
+        most = math.max(most, child:measure(frame, rects[index].width))
     end
     return most
 end

@@ -22,4 +22,5 @@ return {
     Subviews = subviews.Subviews,
     Primitive = require("ito.runtime.primitive"),
     Composition = require("ito.runtime.composition"),
+    observable = require("ito.runtime.observable"),
 }

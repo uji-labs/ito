@@ -35,6 +35,26 @@ describe("toolbars", function()
         end
     end
 
+    it("shows an item declared later while the content it sits in stays the same", function()
+        local s = screen.new(30, 3)
+        local more = ito.state(false)
+        local Content = ito.view(function()
+            return ito.VStack({ ito.Text("body"), ito.ToolbarItems(placement.bottom_bar) })
+        end)
+        local rows = s:show(function()
+            local host = ito.ToolbarHost(Content())
+            if more.value then
+                host:toolbar({ ito.ToolbarItem(placement.bottom_bar, text("later")) })
+            end
+            return host
+        end)
+        assert.equal("", trimmed(rows[2]))
+        more.value = true
+        rows = s:rows()
+        assert.equal("later", trimmed(rows[2]))
+        assert.same({}, reported)
+    end)
+
     it("shows each item in the section its placement names, in the order they were declared", function()
         local s = screen.new(30, 7)
         local rows = s:show(function()

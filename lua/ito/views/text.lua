@@ -37,15 +37,18 @@ end
 
 function Text:rows()
     local style = self.text_style
-    local rows = {}
-    for index, line in ipairs(text.lines(self.content)) do
-        rows[index] = { { line, style } }
+    if self.rows_style ~= style then
+        local rows = {}
+        for index, line in ipairs(text.lines(self.content)) do
+            rows[index] = { { line, style } }
+        end
+        self.rows_style, self.made_rows = style, rows
     end
-    return rows
+    return self.made_rows
 end
 
 function Text:content_height()
-    return #text.lines(self.content)
+    return #self:rows()
 end
 
 function Text:content_width()

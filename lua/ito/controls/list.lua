@@ -4,6 +4,8 @@ local View = require("ito.view")
 
 local List = class(View)
 
+List.live = true
+
 function List:init(items, row)
     View.init(self, {})
     if type(items) ~= "table" then

@@ -1,8 +1,11 @@
 local class = require("ito.class")
+local environment = require("ito.runtime.environment")
+local host = require("ito.host")
 local identity = require("ito.runtime.identity").identity
 local is_view = require("ito.runtime.element").is_view
-local Provide = require("ito.runtime.environment").Provide
 local scope = require("ito.runtime.scope")
+
+local Provide = environment.Provide
 
 local M = {}
 
@@ -58,13 +61,80 @@ local function forward(element, pending)
     end
 end
 
-function Call:compose(composition, node, environment)
+local function themed(view, props, node)
+    local theme = environment.Theme.current
+    local override = theme and theme.views and theme.views[view]
+    if not override then
+        return view.body(props)
+    end
+    local ok, result = pcall(override, props)
+    if ok then
+        node.memo.override_failure = nil
+        return result
+    end
+    local problem = "theme view: " .. tostring(result)
+    if node.memo.override_failure ~= problem then
+        node.memo.override_failure = problem
+        host.report(problem)
+    end
+    node.hook = 0
+    return view.body(props)
+end
+
+local function same(kept, props)
+    for key, value in pairs(kept) do
+        if not rawequal(props[key], value) then
+            return false
+        end
+    end
+    for key in pairs(props) do
+        if kept[key] == nil then
+            return false
+        end
+    end
+    return true
+end
+
+local function same_changes(kept, pending)
+    if #kept ~= #pending then
+        return false
+    end
+    for index = 1, #pending do
+        local before, now = kept[index], pending[index]
+        if before[2] ~= now[2] then
+            return false
+        end
+        for at = 1, now[2] + 2 do
+            if not rawequal(before[at], now[at]) then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+function Call:compose(composition, node, scoped)
+    if
+        node.view == self.view
+        and not node.invalid
+        and node.environment == scoped
+        and same(node.props, self.props)
+        and same_changes(node.changes, self.pending)
+    then
+        node.kept = composition.generation
+        if node.stale then
+            node.stale = false
+            node.result = composition:place(node.built, node, 1, scoped)
+        end
+        return node.result
+    end
     local outer = scope.current
     scope.current = node
     node.hook = 0
     node.composition = composition
-    node.environment = environment
-    local ok, result = pcall(self.view.body, self.props)
+    node.environment = scoped
+    node.view = nil
+    local ok, result = pcall(themed, self.view, self.props, node)
     scope.current = outer
     if not ok then
         error(result, 0)
@@ -72,7 +142,10 @@ function Call:compose(composition, node, environment)
     if #self.pending > 0 then
         forward(result, self.pending)
     end
-    return composition:place(result, node, 1, environment)
+    local composed = composition:place(result, node, 1, scoped)
+    node.view, node.props, node.changes, node.built, node.result = self.view, self.props, self.pending, result, composed
+    node.invalid, node.stale = false, false
+    return composed
 end
 
 local Descriptor = {}
@@ -100,6 +173,10 @@ function M.body(content)
     return M.view(function()
         return content()
     end)
+end
+
+function M.is_descriptor(value)
+    return getmetatable(value) == Descriptor
 end
 
 M.deferring = deferring

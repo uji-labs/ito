@@ -33,6 +33,56 @@ describe("the view kit", function()
         assert.equal("196", s.screen:spans(3)[1].fg)
     end)
 
+    it("builds lines for the width a view gets", function()
+        local s = screen.new(12, 3)
+        local widths = {}
+        local rows = s:show(function()
+            return kit.HStack({
+                kit.Text("ab"),
+                kit.Lines(function(width)
+                    widths[#widths + 1] = width
+                    return { { { string.rep("x", width) } }, { { tostring(width) } } }
+                end),
+            })
+        end)
+        assert.equal("abxxxxxxxxxx", rows[1])
+        assert.equal("  10", screen.trimmed(rows[2]))
+        assert.equal(10, widths[#widths])
+        local built = 0
+        local build = function(width)
+            built = built + 1
+            return { { { tostring(width) } } }
+        end
+        s:show(function()
+            return kit.Lines(build)
+        end)
+        s:rows()
+        s:rows()
+        assert.equal(1, built)
+    end)
+
+    it("measures each child of a row at the width it gets", function()
+        local s = screen.new(6, 4)
+        local rows = s:show(function()
+            return kit.VStack({
+                kit.HStack({
+                    kit.Text("> "),
+                    kit.Lines(function(width)
+                        local lines = {}
+                        for index = 1, math.ceil(8 / width) do
+                            lines[index] = { { string.rep("w", width) } }
+                        end
+                        return lines
+                    end),
+                }),
+                kit.Text("end"),
+            })
+        end)
+        assert.equal("> wwww", rows[1])
+        assert.equal("  wwww", rows[2])
+        assert.equal("end", trimmed(rows[3]))
+    end)
+
     it("lays a row out by width, share and growth", function()
         local s = screen.new(20, 2)
         local rows = s:show(function()
@@ -123,7 +173,6 @@ describe("the view controls", function()
             items[index] = "item " .. index
         end
         local rows = s:show(function()
-            built = {}
             return kit.List(items, function(item, _, selected)
                 built[#built + 1] = item
                 return kit.Text((selected and "> " or "  ") .. item)
@@ -143,6 +192,7 @@ describe("the view controls", function()
         s:press("enter")
         assert.equal("item 100", chosen)
         s:wheel(2, 2, -1)
+        built = {}
         rows = s:rows()
         assert.equal("> item 97", trimmed(rows[2]))
         assert.is_true(#built <= 6)
@@ -244,6 +294,54 @@ describe("the view controls", function()
                 end)
             end)
         end, "a subview can be placed once")
+    end)
+
+    it("draws a changed view in place while the view around it stays the same", function()
+        local s = screen.new(10, 2)
+        local word = kit.state("a")
+        local runs = 0
+        local Word = kit.view(function()
+            return kit.Text(word.value)
+        end)
+        local Panel = kit.view(function()
+            runs = runs + 1
+            return kit.VStack({ kit.Text("top"), Word() })
+        end)
+        s:show(function()
+            return Panel()
+        end)
+        word.value = "changed"
+        local rows = s:rows()
+        assert.same({ "top", "changed" }, { trimmed(rows[1]), trimmed(rows[2]) })
+        assert.equal(1, runs)
+    end)
+
+    it("lays a view out again only when its room changes", function()
+        local s = screen.new(20, 3)
+        local arranged = 0
+        local Column = kit.Layout(function(children, room)
+            return room.width,
+                #children,
+                function(x, y)
+                    arranged = arranged + 1
+                    for index, child in ipairs(children) do
+                        local width, height = child:measure(room)
+                        child:place(x, y + index - 1, width, height)
+                    end
+                end
+        end)
+        local Letters = kit.view(function()
+            return Column({ kit.Text("a"), kit.Text("b") })
+        end)
+        local tick = kit.state(0)
+        s:show(function()
+            return kit.VStack({ kit.Text(tostring(tick.value)), Letters() })
+        end)
+        local first = arranged
+        tick.value = 1
+        local rows = s:rows()
+        assert.equal(first, arranged)
+        assert.same({ "1", "a", "b" }, { trimmed(rows[1]), trimmed(rows[2]), trimmed(rows[3]) })
     end)
 
     it("lets a custom layout place its children, and leaves out the ones it skips", function()
@@ -354,6 +452,159 @@ describe("the view controls", function()
             return kit.VStack({ kit.ScrollView(kit.Text(lines(10))):follow_end() })
         end)
         assert.equal("line 10", trimmed(rows[3]))
+    end)
+
+    it("shows the end of a lazy stack, keeps its place when scrolled up, and builds only what shows", function()
+        local s = screen.new(10, 4)
+        local items, built = {}, {}
+        for index = 1, 20 do
+            items[index] = { id = "m" .. index, rows = index % 3 == 0 and 2 or 1 }
+        end
+        local scroll = kit.ScrollState({ follow = true })
+        local function rows()
+            return s:show(function()
+                return kit.LazyVStack(items, function(item)
+                    built[item.id] = true
+                    local lines = {}
+                    for row = 1, item.rows do
+                        lines[row] = { { item.id .. "." .. row } }
+                    end
+                    return kit.Lines(lines)
+                end)
+                    :item_id(function(item)
+                        return item.id
+                    end)
+                    :state(scroll)
+                    :footer(kit.Text("foot"))
+            end)
+        end
+        local shown = rows()
+        assert.same({ "m18.2", "m19.1", "m20.1", "foot" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]), trimmed(shown[4]) })
+        assert.is_nil(built.m1)
+        scroll:scroll(-2)
+        shown = rows()
+        assert.equal("m18.1", trimmed(shown[2]))
+        assert.is_false(scroll.following)
+        items[21] = { id = "m21", rows = 1 }
+        shown = rows()
+        assert.equal("m18.1", trimmed(shown[2]))
+        scroll:to_top()
+        shown = rows()
+        assert.equal("m1.1", trimmed(shown[1]))
+        scroll:to_end()
+        shown = rows()
+        assert.equal("m21.1", trimmed(shown[3]))
+        assert.equal("foot", trimmed(shown[4]))
+        assert.is_true(scroll.following)
+    end)
+
+    it("builds only the rows of a group that show, and scrolls through them", function()
+        local s = screen.new(10, 3)
+        local built = {}
+        local scroll = kit.ScrollState({ follow = true })
+        local Block = kit.view(function(props)
+            built[props.name] = true
+            return kit.Text(props.name)
+        end)
+        local items = { "short", "long" }
+        local shown = s:show(function()
+            return kit.LazyVStack(items, function(item)
+                if item == "short" then
+                    return kit.Text("short")
+                end
+                local blocks = {}
+                for index = 1, 50 do
+                    blocks[index] = Block({ name = "b" .. index })
+                end
+                return kit.Group(blocks)
+            end):state(scroll)
+        end)
+        assert.same({ "b48", "b49", "b50" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]) })
+        assert.is_nil(built.b1)
+        scroll:to_top()
+        shown = s:rows()
+        assert.same({ "short", "b1", "b2" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]) })
+    end)
+
+    it("leaves a lazy stack's rows alone while nothing they show changes", function()
+        local s = screen.new(10, 3)
+        local items = { "a", "b", "c" }
+        local built, runs = 0, 0
+        local Label = kit.view(function(props)
+            runs = runs + 1
+            return kit.Text(props.text)
+        end)
+        local shown = s:show(function()
+            return kit.LazyVStack(items, function(item)
+                built = built + 1
+                return Label({ text = item })
+            end)
+        end)
+        assert.same({ "a", "b", "c" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]) })
+        local first_built, first_runs = built, runs
+        shown = s:rows()
+        assert.same({ "a", "b", "c" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]) })
+        assert.equal(first_built, built)
+        assert.equal(first_runs, runs)
+    end)
+
+    it("puts the footer right under content shorter than the room", function()
+        local s = screen.new(10, 5)
+        local shown = s:show(function()
+            return kit.LazyVStack({ "a", "b" }, function(item)
+                return kit.Text(item)
+            end):footer(kit.Text("foot"))
+        end)
+        assert.same({ "a", "b", "foot", "" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]), trimmed(shown[4]) })
+    end)
+
+    it("scrolls a view to the offset its scroll state holds", function()
+        local s = screen.new(6, 2)
+        local scroll = kit.ScrollState()
+        local function rows()
+            return s:show(function()
+                return kit.ScrollView(kit.Lines({ { { "one" } }, { { "two" } }, { { "three" } } })):state(scroll)
+            end)
+        end
+        assert.equal("one", trimmed(rows()[1]))
+        scroll:scroll(1)
+        assert.equal("two", trimmed(rows()[1]))
+        scroll:scroll(5)
+        assert.equal("two", trimmed(rows()[1]))
+        assert.equal(1, scroll.offset)
+    end)
+
+    it("keeps a hidden view's state without drawing it, and clears under an opaque one", function()
+        local s = screen.new(10, 3)
+        local count
+        local Counter = kit.view(function()
+            count = kit.state(0)
+            return kit.Text("n" .. count.value)
+        end)
+        local hide = kit.state(false)
+        local shown = s:show(function()
+            return kit.ZStack({
+                alignment = kit.Alignment.top_leading,
+                kit.Text("xxxxxxxx"),
+                Counter():hidden(hide.value),
+                kit.Text("ab"):width(4):opaque():hidden(not hide.value),
+            })
+        end)
+        assert.equal("n0xxxxxx", trimmed(shown[1]))
+        count.value = 3
+        hide.value = true
+        assert.equal("ab  xxxx", s:rows()[1]:sub(1, 8))
+        hide.value = false
+        assert.equal("n3xxxxxx", trimmed(s:rows()[1]))
+    end)
+
+    it("records the focus scope a control was drawn in", function()
+        local s = screen.new(10, 2)
+        local value = kit.state("")
+        s:show(function()
+            return kit.VStack({ kit.TextField(value):focus_scope("sheet") })
+        end)
+        assert.equal("sheet", s.frame.focusables[1].scope)
     end)
 
     it("spins while it is shown and asks for the next frame", function()

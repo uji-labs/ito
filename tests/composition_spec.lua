@@ -36,6 +36,23 @@ describe("composition", function()
         assert.equal(5, states.b.value)
     end)
 
+    it("remembers a value until one of its keys changes", function()
+        local composed = composition()
+        local made, seen = 0, nil
+        local App = ito.view(function(props)
+            seen = ito.remember(function()
+                made = made + 1
+                return props.key .. made
+            end, props.key)
+            return Group({})
+        end)
+        composed:compose(App({ key = "a" }))
+        composed:compose(App({ key = "a" }))
+        assert.equal("a1", seen)
+        composed:compose(App({ key = "b" }))
+        assert.equal("b2", seen)
+    end)
+
     it("asks for a new frame only when a state really changes", function()
         local states = {}
         local Counter = counter(states)
@@ -214,5 +231,133 @@ describe("composition", function()
         assert.has_error(function()
             states.a.other = 1
         end, "a state only has a value")
+    end)
+
+    it("runs a view's body again only when its props change", function()
+        local composed = composition()
+        local runs = 0
+        local Label = ito.view(function(props)
+            runs = runs + 1
+            return ito.Text(props.text)
+        end)
+        composed:compose(Group({ Label({ text = "a" }) }))
+        composed:compose(Group({ Label({ text = "a" }) }))
+        assert.equal(1, runs)
+        composed:compose(Group({ Label({ text = "b" }) }))
+        assert.equal(2, runs)
+    end)
+
+    it("runs only the view that read a changed state, and leaves its parents and siblings alone", function()
+        local composed = composition()
+        local shared = ito.state(1)
+        local runs = { reader = 0, parent = 0, sibling = 0 }
+        local Reader = ito.view(function()
+            runs.reader = runs.reader + 1
+            return ito.Text(tostring(shared.value))
+        end)
+        local Parent = ito.view(function()
+            runs.parent = runs.parent + 1
+            return Group({ Reader() })
+        end)
+        local Sibling = ito.view(function()
+            runs.sibling = runs.sibling + 1
+            return Group({})
+        end)
+        local App = ito.view(function()
+            return Group({ Parent(), Sibling() })
+        end)
+        composed:compose(App())
+        composed:compose(App())
+        assert.same({ reader = 1, parent = 1, sibling = 1 }, runs)
+        shared.value = 2
+        composed:compose(App())
+        assert.same({ reader = 2, parent = 1, sibling = 1 }, runs)
+    end)
+
+    it("runs a view again when its environment changes", function()
+        local composed = composition()
+        local Accent = ito.Local("red")
+        local runs, seen = 0, nil
+        local Swatch = ito.view(function()
+            runs = runs + 1
+            seen = Accent.current
+            return Group({})
+        end)
+        composed:compose(Accent:provide("red", Swatch()))
+        composed:compose(Accent:provide("red", Swatch()))
+        assert.equal(1, runs)
+        composed:compose(Accent:provide("blue", Swatch()))
+        assert.equal(2, runs)
+        assert.equal("blue", seen)
+    end)
+
+    it("runs the views that read a field of an observable object again when that field changes", function()
+        local composed = composition()
+        local Model = class()
+        function Model:init()
+            self.name = "a"
+            self.count = 0
+            ito.observable(self)
+        end
+        function Model:label()
+            return self.name .. self.count
+        end
+        local model = Model()
+        local runs = { name = 0, count = 0 }
+        local Name = ito.view(function()
+            runs.name = runs.name + 1
+            return ito.Text(model:label())
+        end)
+        local Count = ito.view(function()
+            runs.count = runs.count + 1
+            return ito.Text(tostring(model.count))
+        end)
+        local App = ito.view(function()
+            return Group({ Name(), Count() })
+        end)
+        composed:compose(App())
+        model.name = "a"
+        composed:compose(App())
+        assert.same({ name = 1, count = 1 }, runs)
+        model.name = "b"
+        composed:compose(App())
+        assert.same({ name = 2, count = 1 }, runs)
+        model.count = 1
+        composed:compose(App())
+        assert.same({ name = 3, count = 2 }, runs)
+    end)
+
+    it("does not track a field set with rawset", function()
+        local composed = composition()
+        local model = ito.observable({ shown = "a" })
+        rawset(model, "cache", "x")
+        local runs = 0
+        local Reader = ito.view(function()
+            runs = runs + 1
+            return ito.Text(model.shown .. model.cache)
+        end)
+        composed:compose(Reader())
+        model.cache = "y"
+        composed:compose(Reader())
+        assert.equal(1, runs)
+        model.shown = "b"
+        composed:compose(Reader())
+        assert.equal(2, runs)
+    end)
+
+    it("keeps the views inside a skipped view and their state", function()
+        local states = {}
+        local Counter = counter(states)
+        local composed = composition()
+        local Panel = ito.view(function()
+            return Group({ Counter({ name = "a" }) })
+        end)
+        composed:compose(Group({ Panel() }))
+        local first = states.a
+        composed:compose(Group({ Panel() }))
+        states.a.value = 4
+        composed:compose(Group({ Panel() }))
+        assert.equal(first, states.a)
+        assert.equal(4, states.a.value)
     end)
 end)

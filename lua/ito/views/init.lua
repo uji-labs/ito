@@ -7,6 +7,7 @@ return {
     Spacer = require("ito.views.spacer"),
     Text = require("ito.views.text"),
     Lines = require("ito.views.lines"),
+    Group = require("ito.views.group"),
     Layout = require("ito.views.layout"),
     SubcomposeLayout = require("ito.views.subcompose"),
 }

@@ -63,7 +63,7 @@ local function Layout(measure)
         end
     end
 
-    function Container:draw(frame)
+    function Container:paint(frame)
         if self.fill then
             frame:fill(self.rect, self.fill)
         end

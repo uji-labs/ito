@@ -3,14 +3,24 @@ local Tuple = require("ito.runtime.identity").Tuple
 
 local Node = class()
 
-function Node:init(kind)
+function Node:init(kind, parent)
     self.kind = kind
+    self.parent = parent
     self.children = {}
     self.keyed = {}
     self.states = {}
     self.memo = {}
     self.hook = 0
     self.seen = 0
+end
+
+function Node:touch()
+    self.invalid = true
+    local node = self.parent
+    while node do
+        node.stale = true
+        node = node.parent
+    end
 end
 
 function Node:slot(key)

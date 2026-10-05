@@ -25,13 +25,14 @@ local THEME = {
         border = ito.TextStyle({ foreground = COLORS.muted }),
         input = ito.TextStyle({ foreground = COLORS.text }),
         cursor = ito.TextStyle({ foreground = COLORS.cursor }),
+        selection = ito.TextStyle({ reverse = true }),
     },
     symbols = { spinner = { "-", "+" }, mask = "•", cursor = "█" },
     borders = { plain = PLAIN, rounded = ROUNDED },
     limits = { spinner_interval = 0.1 },
     text = {},
     options = {},
-    templates = {},
+    views = {},
 }
 
 M.THEME = THEME
@@ -51,33 +52,9 @@ function Screen:show(build)
 end
 
 function Screen:render()
-    local ctx = self.themes:context()
-    ito.Theme:set(ctx)
     self.screen:clear()
-    local frame = ito.Frame(self.screen, ctx)
-    local root = self.composition:compose(ito.Theme:provide(ctx, self.build()))
-    if root then
-        root:place(frame, ito.layout.rect(0, 0, self.width, self.height))
-        root:draw(frame)
-    end
-    self.frame = frame
-    local found
-    for _, focusable in ipairs(frame.focusables) do
-        if focusable.target == self.focus then
-            found = focusable
-        end
-    end
-    if not found then
-        for _, focusable in ipairs(frame.focusables) do
-            if focusable.wanted then
-                found = focusable
-                break
-            end
-        end
-    end
-    found = found or frame.focusables[1]
-    self.focus = found and found.target
-    self.focused = found and found.handle
+    self.frame = self.window:render(self.build(), self.themes:context())
+    self.focused = self.window.focused
 end
 
 function Screen:rows()
@@ -110,14 +87,7 @@ function Screen:tap(row, col)
 end
 
 function Screen:wheel(row, col, direction)
-    for index = #self.frame.scrollables, 1, -1 do
-        local entry = self.frame.scrollables[index]
-        local rect = entry.rect
-        if row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width then
-            entry.scroll(direction * SCROLL)
-            break
-        end
-    end
+    self.window:wheel(row, col, direction * SCROLL)
     return self:rows()
 end
 
@@ -134,7 +104,7 @@ function M.new(width, height)
             end,
         }),
     }, Screen)
-    self.composition = ito.Composition()
+    self.window = ito.Window(screen, function() end)
     return self
 end
 

@@ -1,11 +1,12 @@
+local call = require("ito.runtime.call")
 local color = require("ito.style.color")
 local text_style = require("ito.style.text_style")
 
 local M = {}
 
-local GROUPS = { "colors", "styles", "symbols", "borders", "text", "limits", "options", "templates" }
+local GROUPS = { "colors", "styles", "symbols", "borders", "text", "limits", "options", "views" }
 
-local OPEN = { colors = true, styles = true, options = true }
+local OPEN = { colors = true, styles = true, options = true, views = true }
 
 local SINGULAR = {
     colors = "color",
@@ -14,7 +15,6 @@ local SINGULAR = {
     borders = "border",
     text = "text",
     limits = "limit",
-    templates = "template",
 }
 
 local EDGES = { "top_left", "top_right", "bottom_left", "bottom_right", "horizontal", "vertical" }
@@ -84,15 +84,15 @@ local CHECKS = {
         end
     end,
     options = function() end,
-    templates = function(value, path)
+    views = function(value, path)
         if type(value) ~= "function" then
-            fail(path, "must be a function")
+            fail(path, "must be a function that returns a view")
         end
     end,
 }
 
 local function known(group, key, default)
-    return OPEN[group] or default[group][key] ~= nil or (group == "templates" and key:find(".", 1, true))
+    return OPEN[group] or default[group][key] ~= nil
 end
 
 function M.check(theme, default, path)
@@ -111,7 +111,12 @@ function M.check(theme, default, path)
         local at = path .. "." .. group
         local given = table_at(theme[group], at)
         for key, value in pairs(given) do
-            if type(key) ~= "string" then
+            if group == "views" then
+                if not call.is_descriptor(key) then
+                    fail(at, "keys must be views made with ito.view, not " .. tostring(key))
+                end
+                key = "view"
+            elseif type(key) ~= "string" then
                 fail(at, "keys must be names, not " .. tostring(key))
             end
             if not known(group, key, default) then

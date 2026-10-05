@@ -6,6 +6,8 @@ local View = require("ito.view")
 
 local Host = class(View)
 
+Host.live = true
+
 function Host:init(content)
     View.init(self, { content })
 end
@@ -38,9 +40,16 @@ local function gather(view, found, root)
 end
 
 function Host:compose(composition, node, environment)
-    local board = { items = {}, shown = {} }
+    local memo = node.memo
+    if memo.outer ~= environment then
+        memo.outer = environment
+        memo.board = {}
+        memo.inner = setmetatable({ [Board] = memo.board }, { __index = environment })
+    end
+    local board = memo.board
+    board.items, board.shown = {}, {}
     self.board = board
-    View.compose(self, composition, node, setmetatable({ [Board] = board }, { __index = environment }))
+    View.compose(self, composition, node, memo.inner)
     local declarations = {}
     gather(self, declarations, true)
     for number, declaration in ipairs(declarations) do

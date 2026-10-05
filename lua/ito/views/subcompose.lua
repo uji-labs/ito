@@ -5,6 +5,8 @@ local View = require("ito.view")
 
 local SubcomposeLayout = class(View)
 
+SubcomposeLayout.live = true
+
 function SubcomposeLayout:init(build, opts)
     View.init(self, {})
     if type(build) ~= "function" then

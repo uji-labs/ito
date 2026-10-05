@@ -1,6 +1,5 @@
 local class = require("ito.class")
 local helpers = require("ito.theme.helpers")
-local host = require("ito.host")
 local schema = require("ito.theme.schema")
 
 local revisions = 0
@@ -50,26 +49,6 @@ function Theme:bump()
     self.revision = revise()
 end
 
-function Theme:element(ctx, name, data, width)
-    local before = ctx.width
-    ctx.width = width
-    local ok, lines = pcall(ctx.templates[name], ctx, data)
-    if ok and type(lines) == "table" then
-        self.reported[name] = nil
-        ctx.width = before
-        return lines
-    end
-    local problem = ok and "returned a " .. type(lines) .. " instead of lines" or tostring(lines)
-    if self.reported[name] ~= problem then
-        self.reported[name] = problem
-        host.report("theme " .. name .. ": " .. problem)
-    end
-    ctx.width = width
-    local fallback = self.default.templates[name](ctx, data)
-    ctx.width = before
-    return fallback
-end
-
 local function strict(values)
     local copy = {}
     for name, value in pairs(values) do
@@ -88,7 +67,6 @@ function Theme:context()
     end
     local tokens = self.tokens
     self.built = self.revision
-    self.reported = self.reported or {}
     self.ctx = {
         styles = strict(tokens.styles),
         colors = tokens.colors,
@@ -97,13 +75,10 @@ function Theme:context()
         text = tokens.text,
         limits = tokens.limits,
         options = tokens.options,
-        templates = tokens.templates,
+        views = tokens.views,
     }
     for name, helper in pairs(helpers) do
         self.ctx[name] = helper
-    end
-    self.ctx.element = function(ctx, name, data, width)
-        return self:element(ctx, name, data, width)
     end
     return self.ctx
 end

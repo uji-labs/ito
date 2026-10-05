@@ -28,6 +28,8 @@ end
 
 local Items = class(View)
 
+Items.live = true
+
 function Items:init(at, arrange)
     View.init(self, {})
     if not placement.is(at) then
@@ -46,9 +48,11 @@ function Items:compose(composition, node, environment)
 end
 
 function Items:built()
-    if self.view ~= nil then
+    local from = self.board and self.board.items
+    if self.view ~= nil and self.from == from then
         return self.view or nil
     end
+    self.from = from
     local views = {}
     if self.board then
         self.board.shown[self.placement] = true

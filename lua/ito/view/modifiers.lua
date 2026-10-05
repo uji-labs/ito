@@ -2,7 +2,9 @@ local alignment = require("ito.view.alignment")
 local Item = require("ito.toolbar.item")
 local runtime = require("ito.runtime")
 local color = require("ito.style.color")
-local TextStyle = require("ito.style.text_style").TextStyle
+local text_style = require("ito.style.text_style")
+
+local TextStyle = text_style.TextStyle
 
 local function whole(value, what)
     if type(value) ~= "number" or value < 0 or value % 1 ~= 0 then
@@ -45,7 +47,31 @@ return function(View)
     end
 
     function View:background(value)
-        self.fill = TextStyle({ background = color.check(value, "background") })
+        if text_style.is(value) then
+            self.fill = value
+        elseif color.is(value) then
+            self.fill = TextStyle({ background = value })
+        else
+            error("background must be an ito.Color or an ito.TextStyle, not a " .. type(value), 2)
+        end
+        return self
+    end
+
+    function View:opaque()
+        self.opaque_fill = true
+        return self
+    end
+
+    function View:hidden(hide)
+        self.is_hidden = hide ~= false
+        return self
+    end
+
+    function View:focus_scope(value)
+        if value == nil then
+            error("focus_scope needs a value", 2)
+        end
+        self.scoped = value
         return self
     end
 

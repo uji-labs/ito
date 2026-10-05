@@ -40,11 +40,11 @@ function Frame:clipped(rect, draw)
 end
 
 function Frame:focusable(target, handle, wanted)
-    self.focusables[#self.focusables + 1] = { target = target, handle = handle, wanted = wanted }
+    self.focusables[#self.focusables + 1] = { target = target, handle = handle, wanted = wanted, scope = self.scope }
 end
 
-function Frame:scrollable(rect, scroll)
-    self.scrollables[#self.scrollables + 1] = { rect = rect, scroll = scroll }
+function Frame:scrollable(rect, scroll, state)
+    self.scrollables[#self.scrollables + 1] = { rect = rect, scroll = scroll, state = state, scope = self.scope }
 end
 
 function Frame:again(seconds)

@@ -36,8 +36,12 @@ function Provide:init(owner, value, child)
 end
 
 function Provide:compose(composition, node, environment)
-    local inner = setmetatable({ [self.owner] = self.value }, { __index = environment })
-    return composition:place(self.child, node, 1, inner)
+    local memo = node.memo
+    if memo.outer ~= environment or memo.value ~= self.value then
+        memo.outer, memo.value = environment, self.value
+        memo.inner = setmetatable({ [self.owner] = self.value }, { __index = environment })
+    end
+    return composition:place(self.child, node, 1, memo.inner)
 end
 
 function Local:provide(value, child)

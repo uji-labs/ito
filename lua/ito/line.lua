@@ -1,4 +1,5 @@
 local class = require("ito.class")
+local observable = require("ito.runtime.observable")
 local text = require("ito.text")
 
 local function continuation(byte)
@@ -56,6 +57,7 @@ function Line:init(value)
     self.cursor = #self.text
     self.kill = ""
     self.revision = 0
+    observable(self)
 end
 
 function Line:touch()

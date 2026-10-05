@@ -36,6 +36,9 @@ function View:content_width()
 end
 
 function View:measure(frame, width)
+    if self.is_hidden then
+        return 0
+    end
     if self.fixed_height then
         return self.fixed_height
     end
@@ -48,6 +51,9 @@ function View:measure(frame, width)
 end
 
 function View:natural_width(frame)
+    if self.is_hidden then
+        return 0
+    end
     if self.fixed_width then
         return self.fixed_width
     end
@@ -60,6 +66,9 @@ function View:natural_width(frame)
 end
 
 function View:extent(frame, rect, down)
+    if self.is_hidden then
+        return 0
+    end
     local total = down and rect.height or rect.width
     local fixed = down and self.fixed_height or self.fixed_width
     if fixed then
@@ -110,8 +119,37 @@ function View:attach(composition, node, environment)
     self.extras = extras
 end
 
+local function steady(views)
+    for _, view in ipairs(views or {}) do
+        if not view:steady() then
+            return false
+        end
+    end
+    return true
+end
+
+function View:steady()
+    local known = self.settled
+    if known == nil then
+        known = not self.live and steady(self.composed)
+        for _, extra in ipairs(self.extras or {}) do
+            known = known and (not extra.view or extra.view:steady())
+        end
+        self.settled = known
+    end
+    return known
+end
+
 function View:place(frame, rect)
+    local last = self.rect
+    if last and last.x == rect.x and last.y == rect.y and last.width == rect.width and last.height == rect.height and self:steady() then
+        return
+    end
     self.rect = rect
+    if self.is_hidden then
+        self.inner = rect
+        return
+    end
     local top, bottom, left, right = self:chrome()
     self.inner = layout.rect(rect.x + left, rect.y + top, rect.width - left - right, rect.height - top - bottom)
     self:arrange(frame, self.inner)
@@ -131,6 +169,21 @@ end
 function View:draw_content() end
 
 function View:draw(frame)
+    if self.is_hidden then
+        return
+    end
+    local outer = frame.scope
+    if self.scoped ~= nil then
+        frame.scope = self.scoped
+    end
+    if self.opaque_fill then
+        frame:clear(self.rect)
+    end
+    self:paint(frame)
+    frame.scope = outer
+end
+
+function View:paint(frame)
     if self.fill then
         frame:fill(self.rect, self.fill)
     end
