@@ -115,4 +115,8 @@ function M.inner(area, border, padding)
     return rect(x, y + padding, width, height - padding * 2)
 end
 
+function M.clamp(value, low, high)
+    return math.max(math.min(value, high), low)
+end
+
 return M

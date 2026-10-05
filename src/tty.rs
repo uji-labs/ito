@@ -109,9 +109,16 @@ fn handles(lua: &Lua, (): ()) -> mlua::Result<(AnyUserData, AnyUserData)> {
     Ok(handles)
 }
 
+fn detached(lua: &Lua, (width, height): (u16, u16)) -> mlua::Result<(AnyUserData, AnyUserData)> {
+    let (terminal, _) = virtual_terminal(width, height);
+    let (screen, input) = virtual_screen::open(terminal);
+    Ok((lua.create_userdata(screen)?, lua.create_userdata(input)?))
+}
+
 pub(crate) fn module(lua: &Lua) -> mlua::Result<Table> {
     let module = lua.create_table()?;
     module.set("open", lua.create_function(handles)?)?;
+    module.set("virtual", lua.create_function(detached)?)?;
     Ok(module)
 }
 

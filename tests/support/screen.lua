@@ -1,0 +1,145 @@
+local ito = require("ito")
+local tty = require("ito.tty")
+
+local M = {}
+
+local SCROLL = 3
+
+local PLAIN = { top_left = "┌", top_right = "┐", bottom_left = "└", bottom_right = "┘", horizontal = "─", vertical = "│" }
+local ROUNDED = { top_left = "╭", top_right = "╮", bottom_left = "╰", bottom_right = "╯", horizontal = "─", vertical = "│" }
+
+local COLORS = {
+    text = ito.rgb(0xd4d4d4),
+    muted = ito.rgb(0x808080),
+    accent = ito.Color.cyan,
+    cursor = ito.Color.white,
+}
+
+local THEME = {
+    name = "test",
+    colors = COLORS,
+    styles = {
+        text = ito.TextStyle({ foreground = COLORS.text }),
+        dim = ito.TextStyle({ foreground = COLORS.muted, dim = true }),
+        accent = ito.TextStyle({ foreground = COLORS.accent, bold = true }),
+        border = ito.TextStyle({ foreground = COLORS.muted }),
+        input = ito.TextStyle({ foreground = COLORS.text }),
+        cursor = ito.TextStyle({ foreground = COLORS.cursor }),
+    },
+    symbols = { spinner = { "-", "+" }, mask = "•", cursor = "█" },
+    borders = { plain = PLAIN, rounded = ROUNDED },
+    limits = { spinner_interval = 0.1 },
+    text = {},
+    options = {},
+    templates = {},
+}
+
+M.THEME = THEME
+
+local Screen = {}
+Screen.__index = Screen
+
+local function blank()
+    return { key = "", ctrl = false, alt = false, shift = false }
+end
+
+function Screen:show(build)
+    self.build = ito.body(function()
+        return build(ito.theme())
+    end)
+    return self:rows()
+end
+
+function Screen:render()
+    local ctx = self.themes:context()
+    ito.Theme:set(ctx)
+    self.screen:clear()
+    local frame = ito.Frame(self.screen, ctx)
+    local root = self.composition:compose(ito.Theme:provide(ctx, self.build()))
+    if root then
+        root:place(frame, ito.layout.rect(0, 0, self.width, self.height))
+        root:draw(frame)
+    end
+    self.frame = frame
+    local found
+    for _, focusable in ipairs(frame.focusables) do
+        if focusable.target == self.focus then
+            found = focusable
+        end
+    end
+    if not found then
+        for _, focusable in ipairs(frame.focusables) do
+            if focusable.wanted then
+                found = focusable
+                break
+            end
+        end
+    end
+    found = found or frame.focusables[1]
+    self.focus = found and found.target
+    self.focused = found and found.handle
+end
+
+function Screen:rows()
+    self:render()
+    local rows = {}
+    for row = 0, self.height - 1 do
+        rows[#rows + 1] = self.screen:text(row)
+    end
+    return rows
+end
+
+function Screen:press(...)
+    for _, key in ipairs({ ... }) do
+        local chord = blank()
+        chord.key = key
+        if self.focused then
+            self.focused(chord)
+        end
+        self:render()
+    end
+    return self:rows()
+end
+
+function Screen:tap(row, col)
+    local handler = self.screen:clicked(row, col)
+    if handler then
+        handler()
+    end
+    return self:rows()
+end
+
+function Screen:wheel(row, col, direction)
+    for index = #self.frame.scrollables, 1, -1 do
+        local entry = self.frame.scrollables[index]
+        local rect = entry.rect
+        if row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width then
+            entry.scroll(direction * SCROLL)
+            break
+        end
+    end
+    return self:rows()
+end
+
+function M.new(width, height)
+    local screen = tty.virtual(width, height)
+    local self = setmetatable({
+        screen = screen,
+        width = width,
+        height = height,
+        themes = ito.Themes({
+            default = THEME,
+            load = function(name)
+                error("no theme named " .. name, 0)
+            end,
+        }),
+    }, Screen)
+    self.composition = ito.Composition()
+    return self
+end
+
+function M.trimmed(row)
+    return (row:gsub("%s+$", ""))
+end
+
+return M

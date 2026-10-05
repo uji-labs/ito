@@ -1,108 +1,8 @@
 local class = require("ito.class")
-local host = require("ito.host")
 local layout = require("ito.layout")
-local Line = require("ito.line")
-local text = require("ito.text")
 local View = require("ito.view")
 
-local M = {}
-
-local SINGLE = "^" .. text.CHAR .. "$"
-
-local function typed(chord)
-    return not chord.ctrl and not chord.alt and type(chord.key) == "string" and chord.key:match(SINGLE) ~= nil
-end
-
-local function clamp(value, low, high)
-    return math.max(math.min(value, high), low)
-end
-
-local EDITS = {
-    left = "left",
-    right = "right",
-    home = "home",
-    ["end"] = "tail",
-    backspace = "backspace",
-    delete = "delete_forward",
-}
-
-local TextField = class(View)
-M.TextField = TextField
-
-function TextField:init(value)
-    View.init(self, {})
-    if type(value) ~= "table" then
-        error("TextField takes an ito.state that holds its text", 3)
-    end
-    self.value = value
-end
-
-function TextField:placeholder(hint)
-    self.hint = hint
-    return self
-end
-
-function TextField:hidden()
-    self.masked = true
-    return self
-end
-
-function TextField:on_submit(handler)
-    self.submit = handler
-    return self
-end
-
-function TextField:focused()
-    self.wanted = true
-    return self
-end
-
-function TextField:field()
-    local memo, wanted = self.memo, self.value.value or ""
-    memo.line = memo.line or Line(wanted)
-    if memo.line.text ~= wanted then
-        memo.line:set(wanted)
-    end
-    return memo.line
-end
-
-function TextField:content_height()
-    return 1
-end
-
-function TextField:draw_content(frame)
-    local ctx, line = frame.ctx, self:field()
-    local spans = ctx:typed(
-        { text = line.text, cursor = line.cursor, hidden = self.masked },
-        { text = ctx.style.input, cursor = ctx.style.cursor }
-    )
-    if line.text == "" and self.hint then
-        spans[#spans + 1] = { self.hint, ctx.style.dim }
-    end
-    frame:lines(self.inner, { spans })
-    frame:focusable(self.memo, function(chord)
-        return self:handle(chord)
-    end, self.wanted)
-end
-
-function TextField:handle(chord)
-    local line = self:field()
-    if typed(chord) then
-        line:insert(chord.key)
-    elseif chord.key == "enter" and self.submit then
-        self.submit(line.text)
-        return true
-    elseif EDITS[chord.key] then
-        line[EDITS[chord.key]](line)
-    else
-        return false
-    end
-    self.value.value = line.text
-    return true
-end
-
 local List = class(View)
-M.List = List
 
 function List:init(items, row)
     View.init(self, {})
@@ -140,6 +40,32 @@ function List:footer(builder)
     return self
 end
 
+function List:item_id(identify)
+    if type(identify) ~= "function" then
+        error("item_id takes a function that gives an item's id", 2)
+    end
+    self.identify = identify
+    return self
+end
+
+function List:identities()
+    if not self.identify then
+        return nil, nil
+    end
+    local ids, at = {}, {}
+    for index, item in ipairs(self.items) do
+        local id = self.identify(item, index)
+        if id == nil then
+            error("item_id gave no id for item " .. index, 0)
+        end
+        if at[id] then
+            error("two items in the list have the id " .. tostring(id), 0)
+        end
+        ids[index], at[id] = id, index
+    end
+    return ids, at
+end
+
 function List:compose(composition, node, environment)
     node.lazy = true
     self.memo, self.node = node.memo, node
@@ -149,16 +75,18 @@ end
 
 function List:cursor()
     local count = #self.items
-    local cursor = self.selected and self.selected.value or self.memo.cursor or 1
-    return count == 0 and 0 or clamp(cursor, 1, count)
+    local chosen = not self.selected and self.at and self.at[self.memo.chosen]
+    local cursor = chosen or self.selected and self.selected.value or self.memo.cursor or 1
+    return count == 0 and 0 or layout.clamp(cursor, 1, count)
 end
 
 function List:move(cursor)
-    cursor = clamp(cursor, 1, math.max(#self.items, 1))
+    cursor = layout.clamp(cursor, 1, math.max(#self.items, 1))
     if self.selected then
         self.selected.value = cursor
     else
         self.memo.cursor = cursor
+        self.memo.chosen = self.ids and self.ids[cursor]
     end
 end
 
@@ -177,6 +105,9 @@ function List:rows(frame, offset, inner)
     local cursor = self:cursor()
     while index <= #self.items and used < inner.height do
         local element = self.row(self.items[index], index, index == cursor)
+        if element and self.ids then
+            element.key = self.ids[index]
+        end
         local view = self.composition:place(element, self.node, index, self.environment)
         local height = view and view:measure(frame, inner.width) or 0
         placed[#placed + 1] = { view = view, height = height, index = index }
@@ -194,8 +125,13 @@ function List:arrange(frame, inner)
         room = layout.rect(inner.x, inner.y, inner.width, inner.height - reserved)
     end
     inner = room
+    self.ids, self.at = self:identities()
     local cursor = self:cursor()
-    local offset = clamp(self.memo.offset or 1, 1, math.max(#self.items, 1))
+    if self.ids and not self.selected then
+        self.memo.chosen = self.ids[cursor]
+    end
+    local first = self.at and self.at[self.memo.first]
+    local offset = layout.clamp(first or self.memo.offset or 1, 1, math.max(#self.items, 1))
     if cursor > 0 and cursor < offset then
         offset = cursor
     end
@@ -209,6 +145,7 @@ function List:arrange(frame, inner)
         placed, used = self:rows(frame, offset, inner)
     end
     self.memo.offset, self.memo.visible = offset, #placed
+    self.memo.first = self.ids and self.ids[offset]
     local y = inner.y
     for _, row in ipairs(placed) do
         if row.view then
@@ -272,86 +209,4 @@ function List:handle(chord)
     return true
 end
 
-local ScrollView = class(View)
-M.ScrollView = ScrollView
-
-function ScrollView:init(child)
-    View.init(self, { child })
-end
-
-function ScrollView:follow_end()
-    self.follow = true
-    return self
-end
-
-function ScrollView:content_height(frame, width)
-    local child = self.composed and self.composed[1]
-    return child and child:measure(frame, width) or 0
-end
-
-function ScrollView:arrange(frame, inner)
-    local child = self.composed[1]
-    if not child then
-        return
-    end
-    local memo = self.memo
-    local total = child:measure(frame, inner.width)
-    local most = math.max(total - inner.height, 0)
-    local offset = memo.offset
-    if offset == nil or (self.follow and memo.pinned ~= false) then
-        offset = self.follow and most or 0
-    end
-    memo.offset, memo.most = clamp(offset, 0, most), most
-    child:place(frame, layout.rect(inner.x, inner.y - memo.offset, inner.width, total))
-end
-
-function ScrollView:scroll(rows)
-    local memo = self.memo
-    memo.offset = clamp((memo.offset or 0) + rows, 0, memo.most or 0)
-    memo.pinned = memo.offset >= (memo.most or 0)
-end
-
-function ScrollView:draw(frame)
-    if self:framed() then
-        frame:chrome(self)
-    end
-    frame:clipped(self.inner, function()
-        for _, child in ipairs(self.composed or {}) do
-            child:draw(frame)
-        end
-    end)
-    frame:scrollable(self.inner, function(rows)
-        self:scroll(rows)
-    end)
-    if self.click then
-        frame:clickable(self.rect, self.click)
-    end
-end
-
-local Spinner = class(View)
-M.Spinner = Spinner
-
-function Spinner:init()
-    View.init(self, {})
-end
-
-function Spinner:content_height()
-    return 1
-end
-
-function Spinner:content_width(frame)
-    return frame.ctx:measure(frame.ctx.symbols.spinner[1] or "")
-end
-
-function Spinner:draw_content(frame)
-    local ctx = frame.ctx
-    local frames, interval = ctx.symbols.spinner, ctx.limits.spinner_interval
-    if #frames == 0 then
-        return
-    end
-    local shown = frames[math.floor(host.clock() / interval) % #frames + 1]
-    frame:lines(self.inner, { { { shown, ctx.style.accent } } })
-    frame:again(interval)
-end
-
-return M
+return List

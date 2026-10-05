@@ -220,4 +220,16 @@ function M.ranges(chars, width)
     return rows
 end
 
+function M.widest(rows)
+    local most = 0
+    for _, line in ipairs(rows) do
+        local used = 0
+        for _, span in ipairs(line) do
+            used = used + M.width(span[1])
+        end
+        most = math.max(most, used)
+    end
+    return most
+end
+
 return M

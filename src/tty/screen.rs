@@ -16,12 +16,12 @@ use crate::convert;
 use super::surface::{Cursor, Shape, Surface};
 use area::{Area, region};
 use read::{Run, runs};
-use style::StyleSpec;
+use style::text_style;
 use targets::Targets;
 
 pub struct Screen {
     surface: Box<dyn Surface>,
-    styles: Vec<Style>,
+    styles: Vec<Option<Style>>,
     cursor: Option<Cursor>,
     targets: Targets,
 }
@@ -42,15 +42,33 @@ impl Screen {
         self
     }
 
-    fn resolve(&self, id: Option<usize>) -> io::Result<Style> {
-        match id {
-            None | Some(0) => Ok(Style::default()),
-            Some(id) => self
-                .styles
-                .get(id.saturating_sub(1))
-                .copied()
-                .ok_or_else(|| io::Error::other(format!("unknown style {id}"))),
+    fn resolve(&mut self, style: &Value) -> mlua::Result<Style> {
+        let style = match style {
+            Value::Nil => return Ok(Style::default()),
+            Value::Table(style) => style,
+            Value::Integer(_) | Value::Number(_) => {
+                return Err(io::Error::other("a style is an ito.TextStyle, not a number").into());
+            }
+            other => {
+                return Err(io::Error::other(format!(
+                    "a style is an ito.TextStyle, not a {}",
+                    other.type_name()
+                ))
+                .into());
+            }
+        };
+        let Some(id) = style.raw_get::<Option<usize>>("id")? else {
+            return Err(io::Error::other("a style is an ito.TextStyle, not a plain table").into());
+        };
+        if let Some(Some(found)) = self.styles.get(id) {
+            return Ok(*found);
         }
+        let found = text_style(style)?;
+        if self.styles.len() <= id {
+            self.styles.resize(id + 1, None);
+        }
+        self.styles[id] = Some(found);
+        Ok(found)
     }
 
     fn put(&mut self, at: (u16, u16), right: u16, text: &str, style: Style) -> u16 {
@@ -70,7 +88,7 @@ impl Screen {
             Value::String(text) => (text, Style::default()),
             Value::Table(span) => (
                 span.raw_get::<mlua::LuaString>(1)?,
-                self.resolve(span.raw_get(2)?)?,
+                self.resolve(&span.raw_get::<Value>(2)?)?,
             ),
             other => {
                 return Err(io::Error::other(format!(
@@ -102,11 +120,6 @@ impl Screen {
 impl Screen {
     fn size(&mut self) -> io::Result<(u16, u16)> {
         self.surface.size()
-    }
-
-    fn style(&mut self, spec: &StyleSpec) -> io::Result<usize> {
-        self.styles.push(spec.style()?);
-        Ok(self.styles.len())
     }
 
     fn line(&mut self, row: i64, col: i64, spans: Value, width: Option<i64>) -> mlua::Result<i64> {
@@ -143,14 +156,17 @@ impl Screen {
         end.map(i64::from)
     }
 
-    fn fill(&mut self, area: &Area, style: Option<usize>, symbol: Option<&str>) -> io::Result<()> {
+    fn fill(&mut self, area: &Area, style: &Value, symbol: Option<&str>) -> mlua::Result<()> {
         let style = self.resolve(style)?;
         self.cover(area.rect(), style, symbol.unwrap_or(" "));
         Ok(())
     }
 
-    fn paint(&mut self, area: &Area, style: usize) -> io::Result<()> {
-        let style = self.resolve(Some(style))?;
+    fn paint(&mut self, area: &Area, style: &Value) -> mlua::Result<()> {
+        if style.is_nil() {
+            return Err(io::Error::other("paint needs an ito.TextStyle").into());
+        }
+        let style = self.resolve(style)?;
         let buffer = self.surface.buffer();
         let area = area.rect().intersection(buffer.area);
         buffer.set_style(area, style);
@@ -226,10 +242,6 @@ fn raised(err: io::Error) -> mlua::Error {
 impl UserData for Screen {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("size", |_, screen, ()| screen.size().map_err(raised));
-        methods.add_method_mut("style", |lua, screen, spec: Value| {
-            let spec: StyleSpec = convert::options(lua, spec)?;
-            screen.style(&spec).map_err(raised)
-        });
         methods.add_method_mut(
             "line",
             |_, screen, (row, col, spans, width): (i64, i64, Value, Option<i64>)| {
@@ -238,14 +250,14 @@ impl UserData for Screen {
         );
         methods.add_method_mut(
             "fill",
-            |lua, screen, (area, style, symbol): (Value, Option<usize>, Option<String>)| {
+            |lua, screen, (area, style, symbol): (Value, Value, Option<String>)| {
                 let area: Area = convert::options(lua, area)?;
-                screen.fill(&area, style, symbol.as_deref()).map_err(raised)
+                screen.fill(&area, &style, symbol.as_deref())
             },
         );
-        methods.add_method_mut("paint", |lua, screen, (area, style): (Value, usize)| {
+        methods.add_method_mut("paint", |lua, screen, (area, style): (Value, Value)| {
             let area: Area = convert::options(lua, area)?;
-            screen.paint(&area, style).map_err(raised)
+            screen.paint(&area, &style)
         });
         methods.add_method_mut("text", |_, screen, row: i64| Ok(screen.text(row)));
         methods.add_method_mut("spans", |lua, screen, row: i64| match screen.spans(row) {

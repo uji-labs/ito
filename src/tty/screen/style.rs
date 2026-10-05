@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use std::io;
 
+use mlua::Table;
 use ratatui::style::{Color, Modifier, Style};
 
 pub(super) const MODIFIERS: [(&str, Modifier); 7] = [
@@ -13,34 +13,31 @@ pub(super) const MODIFIERS: [(&str, Modifier); 7] = [
     ("strikethrough", Modifier::CROSSED_OUT),
 ];
 
-#[derive(serde::Deserialize)]
-pub(super) struct StyleSpec {
-    fg: Option<String>,
-    bg: Option<String>,
-    #[serde(flatten)]
-    flags: HashMap<String, bool>,
+fn color(style: &Table, field: &str) -> mlua::Result<Option<Color>> {
+    let Some(color) = style.raw_get::<Option<Table>>(field)? else {
+        return Ok(None);
+    };
+    let spec: String = color.raw_get("spec")?;
+    spec.parse::<Color>()
+        .map(Some)
+        .map_err(|_| io::Error::other(format!("invalid colour {spec}")).into())
 }
 
-impl StyleSpec {
-    fn color(text: Option<&str>) -> io::Result<Option<Color>> {
-        text.map(|text| {
-            text.parse::<Color>()
-                .map_err(|_| io::Error::other(format!("invalid colour {text}")))
+pub(super) fn text_style(style: &Table) -> mlua::Result<Style> {
+    let mut out = Style::default();
+    if let Some(fg) = color(style, "foreground")? {
+        out = out.fg(fg);
+    }
+    if let Some(bg) = color(style, "background")? {
+        out = out.bg(bg);
+    }
+    MODIFIERS
+        .into_iter()
+        .try_fold(out, |out, (name, modifier)| {
+            Ok(if style.raw_get::<Option<bool>>(name)? == Some(true) {
+                out.add_modifier(modifier)
+            } else {
+                out
+            })
         })
-        .transpose()
-    }
-
-    pub(super) fn style(&self) -> io::Result<Style> {
-        let mut style = Style::default();
-        if let Some(fg) = Self::color(self.fg.as_deref())? {
-            style = style.fg(fg);
-        }
-        if let Some(bg) = Self::color(self.bg.as_deref())? {
-            style = style.bg(bg);
-        }
-        Ok(MODIFIERS
-            .into_iter()
-            .filter(|(name, _)| self.flags.get(*name) == Some(&true))
-            .fold(style, |style, (_, modifier)| style.add_modifier(modifier)))
-    }
 }

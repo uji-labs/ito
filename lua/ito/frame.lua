@@ -1,5 +1,6 @@
 local class = require("ito.class")
 local layout = require("ito.layout")
+local plain = require("ito.style.text_style").plain
 local View = require("ito.view")
 
 local function overlap(a, b)
@@ -16,10 +17,9 @@ local Frame = class()
 
 Frame.overlap = overlap
 
-function Frame:init(screen, ctx, styles)
+function Frame:init(screen, ctx)
     self.screen = screen
     self.ctx = ctx
-    self.styles = styles
     self.focusables = {}
     self.scrollables = {}
 end
@@ -64,10 +64,10 @@ function Frame:clear(rect)
     end
 end
 
-function Frame:fill(rect, color)
+function Frame:fill(rect, style)
     local painted = self.clip and overlap(self.clip, rect) or rect
     if painted.width > 0 and painted.height > 0 then
-        self.screen:paint(painted, self.styles:get({ bg = color }))
+        self.screen:paint(painted, style)
     end
 end
 
@@ -82,9 +82,9 @@ function Frame:chrome(view)
     if rect.width <= 0 or rect.height <= 0 then
         return
     end
-    local style = view.border_color and self.styles:get({ fg = view.border_color }) or self.ctx.style.border
+    local style = view.border_style or self.ctx.styles.border
     local painted = self.clip and overlap(self.clip, rect) or rect
-    if style ~= 0 and painted.width > 0 and painted.height > 0 then
+    if style ~= plain and painted.width > 0 and painted.height > 0 then
         self.screen:paint(painted, style)
     end
     local set = view.edge

@@ -10,23 +10,7 @@ local function revise()
     return revisions
 end
 
-local function merge(layers)
-    local merged = {}
-    for _, group in ipairs(schema.GROUPS) do
-        local into = {}
-        for _, layer in ipairs(layers) do
-            for key, value in pairs(layer[group] or {}) do
-                into[key] = value
-            end
-        end
-        merged[group] = into
-    end
-    return merged
-end
-
 local Theme = class()
-
-Theme.color = schema.color
 
 function Theme:init(opts)
     self.default = opts.default
@@ -41,30 +25,19 @@ function Theme:load(name)
         return self.default
     end
     local found = self.loader(name)
+    if type(found) == "function" then
+        found = found()
+    end
     if type(found) ~= "table" then
-        error("theme " .. name .. " must return a table", 0)
+        error("theme " .. name .. " must return a theme or a function that builds one", 0)
     end
     return found
 end
 
-function Theme:chain(selection, seen, layers)
-    local spec = type(selection) == "string" and self:load(selection) or selection
-    local name = type(selection) == "string" and selection or spec.name
-    local label = name and "theme " .. name or "theme"
-    if seen[spec] then
-        error(label .. " extends itself", 0)
-    end
-    seen[spec] = true
-    schema.check(spec, label)
-    if spec ~= self.default then
-        self:chain(spec.extends or self.default.name, seen, layers)
-    end
-    layers[#layers + 1] = spec
-    return layers
-end
-
 function Theme:build(selection)
-    return schema.resolve(merge(self:chain(selection, {}, {})), self.default, "theme")
+    local named = type(selection) == "string"
+    local theme = named and self:load(selection) or selection
+    return schema.check(theme, self.default, named and "theme " .. selection or "theme")
 end
 
 function Theme:use(selection, tokens)
@@ -81,10 +54,12 @@ function Theme:bump()
 end
 
 function Theme:element(ctx, name, data, width)
+    local before = ctx.width
     ctx.width = width
     local ok, lines = pcall(ctx.templates[name], ctx, data)
     if ok and type(lines) == "table" then
         self.reported[name] = nil
+        ctx.width = before
         return lines
     end
     local problem = ok and "returned a " .. type(lines) .. " instead of lines" or tostring(lines)
@@ -93,28 +68,33 @@ function Theme:element(ctx, name, data, width)
         host.report("theme " .. name .. ": " .. problem)
     end
     ctx.width = width
-    return self.default.templates[name](ctx, data)
+    local fallback = self.default.templates[name](ctx, data)
+    ctx.width = before
+    return fallback
 end
 
-function Theme:context(styles)
+local function strict(values, what)
+    local copy = {}
+    for name, value in pairs(values) do
+        copy[name] = value
+    end
+    return setmetatable(copy, {
+        __index = function(_, name)
+            error("the theme has no " .. what .. " named " .. tostring(name), 2)
+        end,
+    })
+end
+
+function Theme:context()
     if self.built == self.revision then
         return self.ctx
     end
     local tokens = self.tokens
-    local ids = styles:resolve(tokens.roles)
     self.built = self.revision
     self.reported = self.reported or {}
     self.ctx = {
-        style = setmetatable({}, {
-            __index = function(_, role)
-                local id = ids[role]
-                if id == nil then
-                    error("unknown role " .. tostring(role), 2)
-                end
-                return id
-            end,
-        }),
-        colors = tokens.colors,
+        styles = strict(tokens.styles, "style"),
+        colors = strict(tokens.colors, "color"),
         symbols = tokens.symbols,
         borders = tokens.borders,
         text = tokens.text,
@@ -127,13 +107,6 @@ function Theme:context(styles)
     end
     self.ctx.element = function(ctx, name, data, width)
         return self:element(ctx, name, data, width)
-    end
-    self.ctx.with = function(_, id, role)
-        local spec = tokens.roles[role]
-        if not spec then
-            error("unknown role " .. tostring(role), 2)
-        end
-        return styles:with(id, spec)
     end
     return self.ctx
 end
