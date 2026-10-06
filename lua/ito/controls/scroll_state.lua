@@ -9,6 +9,7 @@ function ScrollState:init(opts)
     self.pending = 0
     self.offset = 0
     self.moved = 0
+    self.jumps = 0
     self.page = 1
 end
 
@@ -19,7 +20,6 @@ end
 function ScrollState:to_top()
     self.pending = 0
     self.following = false
-    self.top = nil
     self.offset = 0
     self.topped = true
 end

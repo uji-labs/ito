@@ -11,6 +11,25 @@ local M = {}
 
 local unpack = table.unpack or unpack
 
+local forwarders = {}
+
+local function forwarding(modifier)
+    return function(self, ...)
+        local pending = rawget(self, "pending")
+        pending[#pending + 1] = { modifier, select("#", ...), ... }
+        return self
+    end
+end
+
+local function forwarder(modifier)
+    local found = forwarders[modifier]
+    if not found then
+        found = forwarding(modifier)
+        forwarders[modifier] = found
+    end
+    return found
+end
+
 local function deferring(owner)
     owner.__index = function(_, key)
         local own = owner[key]
@@ -21,11 +40,7 @@ local function deferring(owner)
         if type(modifier) ~= "function" then
             return nil
         end
-        return function(self, ...)
-            local pending = rawget(self, "pending")
-            pending[#pending + 1] = { modifier, select("#", ...), ... }
-            return self
-        end
+        return forwarder(modifier)
     end
 end
 

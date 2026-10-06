@@ -14,15 +14,31 @@ local function whole(value, what)
 end
 
 local EDGES = { "top_left", "top_right", "bottom_left", "bottom_right", "horizontal", "vertical" }
+local SIDES = { "top", "bottom", "leading", "trailing" }
 
 return function(View)
     function View:padding(amount)
+        self.inset = nil
+        local sides = (self.fill ~= nil or self.edge ~= nil) and "margin" or "pad"
         if type(amount) == "table" then
-            self.pad_y = whole(amount.vertical or 0, "vertical padding")
-            self.pad_x = whole(amount.horizontal or 0, "horizontal padding")
+            if amount.vertical ~= nil then
+                local cells = whole(amount.vertical, "vertical padding")
+                self[sides .. "_top"], self[sides .. "_bottom"] = cells, cells
+            end
+            if amount.horizontal ~= nil then
+                local cells = whole(amount.horizontal, "horizontal padding")
+                self[sides .. "_leading"], self[sides .. "_trailing"] = cells, cells
+            end
+            for _, side in ipairs(SIDES) do
+                if amount[side] ~= nil then
+                    self[sides .. "_" .. side] = whole(amount[side], side .. " padding")
+                end
+            end
         else
             local cells = whole(amount, "padding")
-            self.pad_x, self.pad_y = cells, cells
+            for _, side in ipairs(SIDES) do
+                self[sides .. "_" .. side] = cells
+            end
         end
         return self
     end
@@ -42,6 +58,7 @@ return function(View)
             error("a border's edges are Edges.all or Edges.horizontal", 2)
         end
         self.edge, self.edges = set, edges
+        self.inset = nil
         self.border_style = opts.color ~= nil and TextStyle({ foreground = color.check(opts.color, "a border's color") }) or nil
         return self
     end

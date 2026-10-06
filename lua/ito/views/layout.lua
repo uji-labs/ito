@@ -65,7 +65,7 @@ local function Layout(measure)
 
     function Container:paint(frame)
         if self.fill then
-            frame:fill(self.rect, self.fill)
+            frame:fill(self:surface(), self.fill)
         end
         if self:framed() then
             frame:chrome(self)
@@ -75,7 +75,7 @@ local function Layout(measure)
         end
         self:draw_extras(frame)
         if self.click then
-            frame:clickable(self.rect, self.click)
+            frame:clickable(self:surface(), self.click)
         end
     end
 

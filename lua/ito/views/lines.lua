@@ -4,12 +4,12 @@ local View = require("ito.view")
 
 local Lines = class(View)
 
-function Lines:init(rows)
+function Lines:init(rows, value)
     View.init(self, {})
     if type(rows) ~= "table" and type(rows) ~= "function" then
         error("Lines takes a list of lines, or a function that gives them for a width, not a " .. type(rows), 3)
     end
-    self.source = rows
+    self.source, self.value = rows, value
 end
 
 function Lines:rows(width)
@@ -17,9 +17,10 @@ function Lines:rows(width)
     if type(source) == "table" then
         return source
     end
-    local kept = self.memo or self
-    if kept.lines_source ~= source or kept.lines_width ~= width then
-        kept.lines_source, kept.lines_width, kept.lines = source, width, source(width)
+    local kept, value = self.memo or self, self.value
+    if kept.lines_source ~= source or kept.lines_value ~= value or kept.lines_width ~= width then
+        kept.lines_source, kept.lines_value, kept.lines_width = source, value, width
+        kept.lines = source(width, value)
     end
     return kept.lines
 end

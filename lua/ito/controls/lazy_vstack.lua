@@ -216,22 +216,29 @@ function LazyVStack:below(frame, index, sub, offset, limit)
     return math.max(total, 0)
 end
 
-function LazyVStack:distance(frame, from, to)
+function LazyVStack:distance(frame, from, to, limit)
     local total, index, sub = to.offset - from.offset, from.index, from.sub
     local forward = from.index < to.index or (from.index == to.index and from.sub <= to.sub)
     if not forward then
-        return -self:distance(frame, to, from)
+        local back, reached = self:distance(frame, to, from, limit)
+        return -back, reached
     end
     while index and not (index == to.index and sub == to.sub) do
+        if total > limit then
+            return total, false
+        end
         total = total + self:height(frame, index, sub)
         index, sub = self:next(index, sub)
     end
-    return total
+    return total, true
 end
 
 function LazyVStack:position(frame, room, scroll)
     local top = scroll.top
     local previous = top and self:find(top.id, top.index)
+    if top and not previous then
+        scroll.jumps = scroll.jumps + 1
+    end
     if previous then
         previous = { index = previous, sub = math.min(top.sub, math.max(self:count(previous), 1)), offset = top.offset }
         if self:count(previous.index) == 0 then
@@ -263,7 +270,12 @@ function LazyVStack:position(frame, room, scroll)
         index, sub, offset = self:from_end(frame, room)
     end
     if previous then
-        scroll.moved = scroll.moved + self:distance(frame, previous, { index = index, sub = sub, offset = offset })
+        local now = { index = index, sub = sub, offset = offset }
+        local moved, reached = self:distance(frame, previous, now, 2 * room)
+        scroll.moved = scroll.moved + moved
+        if not reached then
+            scroll.jumps = scroll.jumps + 1
+        end
     end
     return index, sub, offset
 end
@@ -310,8 +322,10 @@ function LazyVStack:arrange(frame, inner)
     if start then
         local item = self.built[start]
         scroll.top = { id = item.id, index = start, sub = start_sub, offset = offset }
+    else
+        scroll.top = nil
     end
-    scroll.viewport = { top = inner.y, height = shown, first = scroll.moved, width = inner.width }
+    scroll.viewport = { top = inner.y, height = shown, first = scroll.moved, width = inner.width, jumps = scroll.jumps }
     scroll.page = room
     for _, group in ipairs(self.groups) do
         group:finish()
@@ -321,26 +335,24 @@ end
 
 function LazyVStack:paint(frame)
     if self.fill then
-        frame:fill(self.rect, self.fill)
+        frame:fill(self:surface(), self.fill)
     end
     if self:framed() then
         frame:chrome(self)
     end
-    frame:clipped(self.content, function()
-        for _, view in ipairs(self.placed or {}) do
-            view:draw(frame)
-        end
-    end)
+    local outer = frame:clip(self.content)
+    for _, view in ipairs(self.placed or {}) do
+        view:draw(frame)
+    end
+    frame:unclip(outer)
     if self.foot_view then
         self.foot_view:draw(frame)
     end
     local scroll = self:scroller()
-    frame:scrollable(self.content, function(rows)
-        scroll:scroll(rows)
-    end, scroll)
+    frame:scrollable(self.content, scroll, scroll)
     self:draw_extras(frame)
     if self.click then
-        frame:clickable(self.rect, self.click)
+        frame:clickable(self:surface(), self.click)
     end
 end
 

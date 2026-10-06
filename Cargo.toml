@@ -15,7 +15,7 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 crossterm = "0.29"
 mlua = { version = "0.12", features = ["serde", "async"] }
-ratatui = "0.30"
+ratatui = { git = "https://github.com/ratatui/ratatui", branch = "main" }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt", "sync", "time"] }
 

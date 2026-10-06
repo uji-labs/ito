@@ -25,26 +25,29 @@ function Frame:init(screen, ctx)
 end
 
 function Frame:put(row, col, line, width)
-    local clip = self.clip
+    local clip = self.clipping
     if clip and (row < clip.y or row >= clip.y + clip.height) then
         return
     end
     self.screen:line(row, col, line, width)
 end
 
-function Frame:clipped(rect, draw)
-    local outer = self.clip
-    self.clip = overlap(outer, rect)
-    draw()
-    self.clip = outer
+function Frame:clip(rect)
+    local outer = self.clipping
+    self.clipping = overlap(outer, rect)
+    return outer
+end
+
+function Frame:unclip(outer)
+    self.clipping = outer
 end
 
 function Frame:focusable(target, handle, wanted)
     self.focusables[#self.focusables + 1] = { target = target, handle = handle, wanted = wanted, scope = self.scope }
 end
 
-function Frame:scrollable(rect, scroll, state)
-    self.scrollables[#self.scrollables + 1] = { rect = rect, scroll = scroll, state = state, scope = self.scope }
+function Frame:scrollable(rect, target, state)
+    self.scrollables[#self.scrollables + 1] = { rect = rect, target = target, state = state, scope = self.scope }
 end
 
 function Frame:again(seconds)
@@ -58,14 +61,14 @@ function Frame:lines(rect, rows)
 end
 
 function Frame:clear(rect)
-    local area = self.clip and overlap(self.clip, rect) or rect
+    local area = self.clipping and overlap(self.clipping, rect) or rect
     if area.width > 0 and area.height > 0 then
         self.screen:fill(area)
     end
 end
 
 function Frame:fill(rect, style)
-    local painted = self.clip and overlap(self.clip, rect) or rect
+    local painted = self.clipping and overlap(self.clipping, rect) or rect
     if painted.width > 0 and painted.height > 0 then
         self.screen:paint(painted, style)
     end
@@ -78,18 +81,18 @@ function Frame:clickable(rect, handler)
 end
 
 function Frame:chrome(view)
-    local rect = view.rect
+    local rect = view:surface()
     if rect.width <= 0 or rect.height <= 0 then
         return
-    end
-    local style = view.border_style or self.ctx.styles.border
-    local painted = self.clip and overlap(self.clip, rect) or rect
-    if style ~= plain and painted.width > 0 and painted.height > 0 then
-        self.screen:paint(painted, style)
     end
     local set = view.edge
     if not set then
         return
+    end
+    local style = view.border_style or self.ctx.styles.border
+    local painted = self.clipping and overlap(self.clipping, rect) or rect
+    if style ~= plain and painted.width > 0 and painted.height > 0 then
+        self.screen:paint(painted, style)
     end
     local bottom = rect.y + rect.height - 1
     local across = view.edges == View.Edges.horizontal

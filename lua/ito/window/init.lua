@@ -46,7 +46,7 @@ function Window:panes(frame)
     for _, entry in ipairs(frame.scrollables) do
         local scroll, viewport = entry.state, entry.state and entry.state.viewport
         if viewport and entry.scope == self.scope then
-            local key = tostring(frame.ctx) .. ":" .. viewport.width
+            local key = tostring(frame.ctx) .. ":" .. viewport.width .. ":" .. (viewport.jumps or 0)
             local pane = self.pane_of[scroll]
             if not pane or pane.key ~= key then
                 pane = { key = key }
@@ -100,15 +100,15 @@ function Window:scrollable_at(row, col)
         local entry = self.scrollables[index]
         local rect = entry.rect
         if row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width then
-            return entry.scroll
+            return entry.target
         end
     end
 end
 
 function Window:wheel(row, col, rows)
-    local scroll = row and col and self:scrollable_at(row, col)
-    if scroll then
-        scroll(rows)
+    local target = row and col and self:scrollable_at(row, col)
+    if target then
+        target:scroll(rows)
         return true
     end
     return false

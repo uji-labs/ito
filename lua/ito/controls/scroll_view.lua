@@ -65,17 +65,15 @@ function ScrollView:paint(frame)
     if self:framed() then
         frame:chrome(self)
     end
-    frame:clipped(self.inner, function()
-        for _, child in ipairs(self.composed or {}) do
-            child:draw(frame)
-        end
-    end)
-    frame:scrollable(self.inner, function(rows)
-        self:scroll(rows)
-    end, self.position)
+    local outer = frame:clip(self.inner)
+    for _, child in ipairs(self.composed or {}) do
+        child:draw(frame)
+    end
+    frame:unclip(outer)
+    frame:scrollable(self.inner, self, self.position)
     self:draw_extras(frame)
     if self.click then
-        frame:clickable(self.rect, self.click)
+        frame:clickable(self:surface(), self.click)
     end
 end
 

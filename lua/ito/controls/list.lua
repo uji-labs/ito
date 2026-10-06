@@ -168,24 +168,26 @@ function List:arrange(frame, inner)
 end
 
 function List:draw_content(frame)
-    frame:clipped(self.inner, function()
-        for _, row in ipairs(self.placed or {}) do
-            if row.view then
-                row.view:draw(frame)
-            end
+    local outer = frame:clip(self.inner)
+    for _, row in ipairs(self.placed or {}) do
+        if row.view then
+            row.view:draw(frame)
         end
-        if self.footing_view then
-            self.footing_view:draw(frame)
-        end
-    end)
+    end
+    if self.footing_view then
+        self.footing_view:draw(frame)
+    end
+    frame:unclip(outer)
     if not self.inert then
         frame:focusable(self.memo, function(chord)
             return self:handle(chord)
         end, self.wanted)
     end
-    frame:scrollable(self.inner, function(rows)
-        self:move(self:cursor() + rows)
-    end)
+    frame:scrollable(self.inner, self)
+end
+
+function List:scroll(rows)
+    self:move(self:cursor() + rows)
 end
 
 function List:handle(chord)

@@ -296,6 +296,45 @@ describe("the view controls", function()
         end, "a subview can be placed once")
     end)
 
+    it("keeps padding added after a background outside it, and padding added before inside it", function()
+        local s = screen.new(6, 2)
+        local red = kit.TextStyle({ background = kit.Color.red })
+        s:show(function()
+            return kit.VStack({
+                kit.Text("in"):padding({ leading = 1 }):background(red),
+                kit.Text("out"):background(red):padding({ leading = 1 }),
+            })
+        end)
+        local inside, outside = s.screen:spans(0), s.screen:spans(1)
+        assert.equal(" in", inside[1].text:sub(1, 3))
+        assert.is_not_nil(inside[1].bg)
+        assert.equal(" ", outside[1].text)
+        assert.is_nil(outside[1].bg)
+        assert.is_not_nil(outside[2].bg)
+    end)
+
+    it("pads the edges it names and keeps the others", function()
+        local s = screen.new(10, 4)
+        local rows = s:show(function()
+            return kit.VStack({
+                kit.Text("ab"):padding({ leading = 3 }),
+                kit.Text("cd"):padding({ top = 1 }):padding({ horizontal = 1 }),
+            })
+        end)
+        assert.same({ "   ab", "", " cd" }, { rows[1]:gsub("%s+$", ""), (rows[2]:gsub("%s+$", "")), (rows[3]:gsub("%s+$", "")) })
+    end)
+
+    it("hands a value to the function that builds lines for a width", function()
+        local s = screen.new(12, 2)
+        local function repeated(width, value)
+            return { { { string.rep(value, width) } } }
+        end
+        local rows = s:show(function()
+            return kit.Lines(repeated, "ab")
+        end)
+        assert.equal(string.rep("ab", 12):sub(1, 12), rows[1])
+    end)
+
     it("draws a changed view in place while the view around it stays the same", function()
         local s = screen.new(10, 2)
         local word = kit.state("a")
@@ -542,6 +581,29 @@ describe("the view controls", function()
         local rows = s:rows()
         assert.same({ "row 8", "row 9", "row 10" }, { trimmed(rows[1]), trimmed(rows[2]), trimmed(rows[3]) })
         assert.is_true(scroll.following)
+    end)
+
+    it("jumps from one end of a lazy stack to the other without building the rows between", function()
+        local s = screen.new(10, 3)
+        local items, built = {}, {}
+        for index = 1, 200 do
+            items[index] = "row " .. index
+        end
+        local scroll = kit.ScrollState({ follow = true })
+        s:show(function()
+            return kit.LazyVStack(items, function(item)
+                built[item] = true
+                return kit.Text(item)
+            end):state(scroll)
+        end)
+        assert.is_true(built["row 200"])
+        scroll:to_top()
+        s:rows()
+        built = {}
+        scroll:to_end()
+        local rows = s:rows()
+        assert.equal("row 200", trimmed(rows[3]))
+        assert.is_nil(built["row 100"])
     end)
 
     it("leaves a lazy stack's rows alone while nothing they show changes", function()

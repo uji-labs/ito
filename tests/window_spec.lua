@@ -49,4 +49,33 @@ describe("window", function()
         assert.same({ "reverse" }, s.screen:spans(0)[1].modifiers)
         assert.equal("hello", window:release({}))
     end)
+
+    it("keeps a selection while a lazy stack scrolls, and drops it after a jump too long to follow", function()
+        local s = screen.new(12, 3)
+        local items = {}
+        for index = 1, 200 do
+            items[index] = "row " .. index
+        end
+        local scroll = kit.ScrollState({ follow = true })
+        s:show(function()
+            return kit.ZStack({
+                alignment = kit.Alignment.top_leading,
+                kit.LazyVStack(items, function(item)
+                    return kit.Text(item)
+                end):state(scroll),
+                kit.SelectionHighlight(),
+            })
+        end)
+        local window = s.window
+        window:press(2, 0)
+        window:drag(2, 3)
+        s:rows()
+        assert.same({ "reverse" }, s.screen:spans(2)[1].modifiers)
+        scroll:scroll(-1)
+        s:rows()
+        assert.is_not_nil(window.selection.range)
+        scroll:to_top()
+        s:rows()
+        assert.is_nil(window.selection.range)
+    end)
 end)

@@ -11,20 +11,58 @@ View.alignment_of = require("ito.view.alignment").of
 
 require("ito.view.modifiers")(View)
 
-function View:chrome()
-    local top, left = self.pad_y or 0, self.pad_x or 0
-    local bottom, right = top, left
-    if self.edge then
+local function measured_inset(view)
+    local top, bottom = view.pad_top or 0, view.pad_bottom or 0
+    local left, right = view.pad_leading or 0, view.pad_trailing or 0
+    if view.edge then
         top, bottom = top + 1, bottom + 1
-        if self.edges ~= View.Edges.horizontal then
+        if view.edges ~= View.Edges.horizontal then
             left, right = left + 1, right + 1
         end
     end
-    return top, bottom, left, right
+    local outer_top, outer_bottom = view.margin_top or 0, view.margin_bottom or 0
+    local outer_left, outer_right = view.margin_leading or 0, view.margin_trailing or 0
+    local outer = outer_top + outer_bottom + outer_left + outer_right
+    return {
+        top + outer_top,
+        bottom + outer_bottom,
+        left + outer_left,
+        right + outer_right,
+        top + bottom + left + right + outer > 0 or view.edge ~= nil,
+        outer > 0 and { outer_top, outer_bottom, outer_left, outer_right } or nil,
+    }
+end
+
+function View:chrome()
+    local inset = self.inset
+    if not inset then
+        inset = measured_inset(self)
+        self.inset = inset
+    end
+    return inset[1], inset[2], inset[3], inset[4]
+end
+
+function View:surface()
+    if not self.inset then
+        self:chrome()
+    end
+    local outer, rect = self.inset[6], self.rect
+    if not outer then
+        return rect
+    end
+    return layout.rect(
+        rect.x + outer[3],
+        rect.y + outer[1],
+        math.max(rect.width - outer[3] - outer[4], 0),
+        math.max(rect.height - outer[1] - outer[2], 0)
+    )
 end
 
 function View:framed()
-    return self.edge ~= nil or (self.pad_x or 0) > 0 or (self.pad_y or 0) > 0
+    if not self.inset then
+        self:chrome()
+    end
+    return self.inset[5]
 end
 
 function View:content_height()
@@ -185,7 +223,7 @@ end
 
 function View:paint(frame)
     if self.fill then
-        frame:fill(self.rect, self.fill)
+        frame:fill(self:surface(), self.fill)
     end
     if self:framed() then
         frame:chrome(self)
@@ -196,7 +234,7 @@ function View:paint(frame)
     end
     self:draw_extras(frame)
     if self.click then
-        frame:clickable(self.rect, self.click)
+        frame:clickable(self:surface(), self.click)
     end
 end
 
