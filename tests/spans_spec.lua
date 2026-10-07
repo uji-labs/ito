@@ -25,6 +25,7 @@ describe("spans", function()
             { { "efgh", red } },
             { { "ij", blue } },
         }, rows)
+        assert.same({ { { "  ", red } }, { { "  ", red } }, { { " ", red } } }, kit.spans.wrap({ { "     ", red } }, 2))
     end)
 
     it("keeps a style change inside a word on one row", function()
@@ -55,5 +56,7 @@ describe("spans", function()
     it("counts wide text by characters like ito.text", function()
         local rows = kit.spans.wrap({ { "ééé ééé", red } }, 4)
         assert.same({ { { "ééé", red } }, { { "ééé", red } } }, rows)
+        rows = kit.spans.wrap({ { "éé", red }, { "é éé", blue } }, 3)
+        assert.same({ { { "éé", red }, { "é", blue } }, { { "éé", blue } } }, rows)
     end)
 end)
