@@ -32,17 +32,34 @@ local function table_at(value, path)
     return value
 end
 
+local function grouped(is, kind)
+    return function(value, path, default)
+        local group = type(value) == "table" and not is(value)
+        if default ~= nil and group == is(default) then
+            fail(path, group and "must be an " .. kind .. ", not a table" or "must be a table of " .. kind .. " values")
+        end
+        if not group then
+            if not is(value) then
+                fail(path, "must be an " .. kind .. ", not a " .. type(value))
+            end
+            return
+        end
+        for key, item in pairs(value) do
+            if not is(item) then
+                fail(path .. "." .. tostring(key), "must be an " .. kind .. ", not a " .. type(item))
+            end
+        end
+        for key in pairs(default or {}) do
+            if value[key] == nil then
+                fail(path .. "." .. key, "must be set, as every theme has it")
+            end
+        end
+    end
+end
+
 local CHECKS = {
-    colors = function(value, path)
-        if not color.is(value) then
-            fail(path, "must be an ito.Color, not a " .. type(value))
-        end
-    end,
-    styles = function(value, path)
-        if not text_style.is(value) then
-            fail(path, "must be an ito.TextStyle, not a " .. type(value))
-        end
-    end,
+    colors = grouped(color.is, "ito.Color"),
+    styles = grouped(text_style.is, "ito.TextStyle"),
     symbols = function(value, path)
         if type(value) == "table" then
             for index, item in ipairs(value) do
@@ -122,7 +139,7 @@ function M.check(theme, default, path)
             if not known(group, key, default) then
                 fail(at .. "." .. key, "the default theme has no " .. SINGULAR[group] .. " named " .. key)
             end
-            CHECKS[group](value, at .. "." .. key)
+            CHECKS[group](value, at .. "." .. key, default[group][key])
         end
         for key in pairs(default[group]) do
             if given[key] == nil then

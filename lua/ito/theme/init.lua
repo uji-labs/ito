@@ -1,6 +1,7 @@
 local class = require("ito.class")
 local helpers = require("ito.theme.helpers")
 local schema = require("ito.theme.schema")
+local text_style = require("ito.style.text_style")
 
 local revisions = 0
 
@@ -49,14 +50,14 @@ function Theme:bump()
     self.revision = revise()
 end
 
-local function strict(values)
+local function strict(values, prefix)
     local copy = {}
     for name, value in pairs(values) do
-        copy[name] = value
+        copy[name] = text_style.is(value) and value or strict(value, prefix .. name .. ".")
     end
     return setmetatable(copy, {
         __index = function(_, name)
-            error("the theme has no style named " .. tostring(name), 2)
+            error("the theme has no style named " .. prefix .. tostring(name), 2)
         end,
     })
 end
@@ -68,7 +69,7 @@ function Theme:context()
     local tokens = self.tokens
     self.built = self.revision
     self.ctx = {
-        styles = strict(tokens.styles),
+        styles = strict(tokens.styles, ""),
         colors = tokens.colors,
         symbols = tokens.symbols,
         borders = tokens.borders,

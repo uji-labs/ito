@@ -116,6 +116,11 @@ return function(View)
         return self
     end
 
+    function View:max_height(cells)
+        self.most_height = cells == math.huge and cells or whole(cells, "max_height")
+        return self
+    end
+
     function View:share(fraction)
         if type(fraction) ~= "number" or fraction < 0 or fraction > 1 then
             error("share takes a fraction from 0 to 1, not " .. tostring(fraction), 2)

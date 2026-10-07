@@ -34,6 +34,7 @@ M.PreferenceKey = runtime.PreferenceKey
 M.Subviews = runtime.Subviews
 
 M.text = text
+M.spans = require("ito.spans")
 M.layout = layout
 M.Line = Line
 M.Themes = Themes
