@@ -118,6 +118,55 @@ describe("themes", function()
         assert.same({ "theme view: no luck" }, reported)
     end)
 
+    it("takes a group of colours or styles under one name and checks it against the default's group", function()
+        local added = kit.TextStyle({ foreground = kit.Color.green })
+        local removed = kit.TextStyle({ foreground = kit.Color.red })
+        local function grouped(changes)
+            local theme = with({
+                colors = { syntax = { keyword = kit.Color.cyan } },
+                styles = { diff = { added = added, removed = removed } },
+            })
+            for group, value in pairs(changes) do
+                for key, item in pairs(value) do
+                    theme[group][key] = item
+                end
+            end
+            return theme
+        end
+        local default = grouped({})
+        local engine = kit.Themes({
+            default = default,
+            load = function(name)
+                error("no theme named " .. name, 0)
+            end,
+        })
+        engine:select(default)
+        local ctx = engine:context()
+        assert.equal(added, ctx.styles.diff.added)
+        local ok, err = pcall(function()
+            return ctx.styles.diff.nope
+        end)
+        assert.is_false(ok)
+        assert.truthy(err:find("the theme has no style named diff.nope", 1, true))
+        assert.equal(kit.Color.cyan, ctx.colors.syntax.keyword)
+        local cases = {
+            { { styles = { diff = { added = added } } }, "theme test.styles.diff.removed: must be set, as every theme has it" },
+            { { styles = { diff = added } }, "theme test.styles.diff: must be a table of ito.TextStyle values" },
+            {
+                { styles = { diff = { added = added, removed = "red" } } },
+                "theme test.styles.diff.removed: must be an ito.TextStyle, not a string",
+            },
+            { { colors = { syntax = { keyword = "cyan" } } }, "theme test.colors.syntax.keyword: must be an ito.Color, not a string" },
+            { { colors = { syntax = {} } }, "theme test.colors.syntax.keyword: must be set, as every theme has it" },
+        }
+        for _, case in ipairs(cases) do
+            local theme = grouped(case[1])
+            local failed, problem = pcall(engine.select, engine, theme)
+            assert.is_false(failed, case[2])
+            assert.truthy(tostring(problem):find(case[2], 1, true), "expected " .. case[2] .. ", got " .. tostring(problem))
+        end
+    end)
+
     it("lets a theme add colours and styles of its own, and raises for a style it lacks", function()
         local engine = themes()
         local own = with({ colors = { link = kit.Color.blue } })

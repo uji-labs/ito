@@ -39,6 +39,7 @@ function ScrollView:arrange(frame, inner)
     local most = math.max(total - inner.height, 0)
     if self.position then
         self.position.page = inner.height
+        self.position.total = total
         memo.offset, memo.most = self.position:resolve(most), most
         child:place(frame, layout.rect(inner.x, inner.y - memo.offset, inner.width, total))
         return

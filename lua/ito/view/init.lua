@@ -85,7 +85,7 @@ function View:measure(frame, width)
     if rows == 0 and self:framed() then
         return 0
     end
-    return rows + top + bottom
+    return math.min(rows + top + bottom, self.most_height or math.huge)
 end
 
 function View:natural_width(frame)

@@ -11,6 +11,7 @@ function ScrollState:init(opts)
     self.moved = 0
     self.jumps = 0
     self.page = 1
+    self.total = 0
 end
 
 function ScrollState:scroll(rows)

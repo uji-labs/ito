@@ -654,6 +654,43 @@ describe("the view controls", function()
         assert.equal(1, scroll.offset)
     end)
 
+    it("caps a view at max_height and leaves a shorter one its own height", function()
+        local s = screen.new(8, 5)
+        local long = { { { "one" } }, { { "two" } }, { { "three" } }, { { "four" } } }
+        local shown = s:show(function()
+            return kit.VStack({ kit.ScrollView(kit.Lines(long)):max_height(2), kit.Text("end") })
+        end)
+        assert.same({ "one", "two", "end" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]) })
+        shown = s:show(function()
+            return kit.VStack({ kit.Lines({ { { "a" } } }):max_height(3), kit.Text("end") })
+        end)
+        assert.equal("end", trimmed(shown[2]))
+        shown = s:show(function()
+            return kit.VStack({ kit.Lines(long):max_height(math.huge), kit.Text("end") })
+        end)
+        assert.equal("end", trimmed(shown[5]))
+    end)
+
+    it("tells its scroll state the rows its content has before the views under it are laid out", function()
+        local s = screen.new(10, 4)
+        local scroll = kit.ScrollState()
+        local lines = {}
+        for index = 1, 5 do
+            lines[index] = { { "row " .. index } }
+        end
+        local shown = s:show(function()
+            return kit.VStack({
+                kit.ScrollView(kit.Lines(lines)):state(scroll):height(2),
+                kit.SubcomposeLayout(function()
+                    return kit.Text(string.format("%d-%d/%d", scroll.offset + 1, scroll.offset + scroll.page, scroll.total))
+                end),
+            })
+        end)
+        assert.equal("1-2/5", trimmed(shown[3]))
+        scroll:scroll(3)
+        assert.equal("4-5/5", trimmed(s:rows()[3]))
+    end)
+
     it("keeps a hidden view's state without drawing it, and clears under an opaque one", function()
         local s = screen.new(10, 3)
         local count
