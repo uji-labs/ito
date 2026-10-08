@@ -9,6 +9,8 @@ local TextStyle = text_style.TextStyle
 
 local Text = class(View)
 
+Text.standalone = true
+
 function Text:init(content)
     View.init(self, {})
     if type(content) ~= "string" and type(content) ~= "table" then
@@ -99,14 +101,14 @@ function Text:lines()
     if self.lines_style ~= style then
         self.lines_style = style
         self.made_lines, self.marked = split(self.content, style)
-        self.rows_width = nil
+        self.rows_width, self.made_width = nil, nil
     end
     return self.made_lines
 end
 
 function Text:rows(width)
     local lines = self:lines()
-    if not self.wrapping then
+    if not self.wrapping or self:content_width() <= width then
         return lines
     end
     if self.rows_width ~= width then
@@ -126,7 +128,11 @@ function Text:content_height(_, width)
 end
 
 function Text:content_width()
-    return text.widest(self:lines())
+    local lines = self:lines()
+    if not self.made_width then
+        self.made_width = text.widest(lines)
+    end
+    return self.made_width
 end
 
 local function tiled(row, width)

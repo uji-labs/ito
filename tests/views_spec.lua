@@ -213,6 +213,31 @@ describe("the view kit", function()
         assert.equal("  |four five six|", trimmed(rows[2]))
     end)
 
+    it("builds only the rows of a grid that show", function()
+        local s = screen.new(12, 3)
+        local scroll = kit.ScrollState({ follow = true })
+        local Named = kit.view(function(props)
+            return kit.GridRow({ kit.Text(props.name), kit.Text("!") })
+        end)
+        local rows = { Named({ name = "top" }) }
+        for index = 1, 200 do
+            rows[#rows + 1] = kit.GridRow({ kit.Text(tostring(index)), kit.Text("|"), kit.Text("x"):grow() })
+        end
+        local shown = s:show(function()
+            return kit.LazyVStack({ 1 }, function()
+                return kit.Grid(rows)
+            end):state(scroll)
+        end)
+        assert.equal("199|x", trimmed(shown[2]))
+        assert.equal("200|x", trimmed(shown[3]))
+        assert.is_nil(rows[100].composed)
+        scroll:to_top()
+        shown = s:rows()
+        assert.equal("top!", trimmed(shown[1]))
+        assert.equal("1  |x", trimmed(shown[2]))
+        assert.is_nil(rows[100].composed)
+    end)
+
     it("builds lines for the width a view gets", function()
         local s = screen.new(12, 3)
         local widths = {}
