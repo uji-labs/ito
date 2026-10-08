@@ -230,8 +230,7 @@ function View:paint(frame)
     end
     self:draw_content(frame)
     for _, child in ipairs(self.composed or {}) do
-        local rect = child.rect
-        if not rect or (rect.width > 0 and rect.height > 0) then
+        if not child.rect or frame:shows(child.rect) then
             child:draw(frame)
         end
     end

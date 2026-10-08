@@ -42,6 +42,17 @@ function Frame:unclip(outer)
     self.clipping = outer
 end
 
+function Frame:shows(rect)
+    if rect.width <= 0 or rect.height <= 0 then
+        return false
+    end
+    local clip = self.clipping
+    if not clip then
+        return true
+    end
+    return rect.x < clip.x + clip.width and clip.x < rect.x + rect.width and rect.y < clip.y + clip.height and clip.y < rect.y + rect.height
+end
+
 function Frame:focusable(target, handle, wanted)
     self.focusables[#self.focusables + 1] = { target = target, handle = handle, wanted = wanted, scope = self.scope }
 end

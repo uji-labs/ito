@@ -56,22 +56,27 @@ end
 
 local function fitted(grid, frame, width)
     local known = grid.known
-    if not known or known.width ~= width or not grid:steady() then
-        known = { width = width, columns = columns(grid, frame, width) }
-        grid.known = known
+    if known and known.width == width and grid:steady() then
+        return known
     end
+    known = { width = width, columns = columns(grid, frame, width) }
+    grid.known = known
     for _, row in ipairs(grid.composed or {}) do
-        if getmetatable(row) == GridRow and row.columns ~= known.columns then
+        if getmetatable(row) == GridRow then
             row.columns, row.rect = known.columns, nil
         end
     end
+    return known
 end
 
 local Grid = class(VStack)
 
 function Grid:content_height(frame, width)
-    fitted(self, frame, width)
-    return VStack.content_height(self, frame, width)
+    local known = fitted(self, frame, width)
+    if not known.height then
+        known.height = VStack.content_height(self, frame, width)
+    end
+    return known.height
 end
 
 function Grid:arrange(frame, inner)
