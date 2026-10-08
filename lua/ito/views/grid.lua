@@ -212,7 +212,8 @@ function Grid:paint(frame)
     while index <= #tops and inner.y + tops[index] < bottom do
         local row = self.composition:place(self.children[index], self.node, index, self.environment)
         if row then
-            row:place(frame, layout.rect(inner.x, inner.y + tops[index], inner.width, heights[index]))
+            local y = inner.y + tops[index]
+            row:place(frame, layout.rect(inner.x, y, inner.width, math.min(heights[index], inner.y + inner.height - y)))
             row:draw(frame)
         end
         index = index + 1

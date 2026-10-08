@@ -238,6 +238,27 @@ describe("the view kit", function()
         assert.is_nil(rows[100].composed)
     end)
 
+    it("cuts a grid's last row at the room the grid gets", function()
+        local rows = screen.new(10, 4):show(function()
+            return kit.Fold(
+                kit.Grid({
+                    kit.GridRow({ kit.Text("1"), kit.Text("one two three four"):wrap():grow() }),
+                    kit.GridRow({ kit.Text("2"), kit.Text("two"):grow() }),
+                }),
+                {
+                    rows = 2,
+                    more = function(hidden)
+                        return kit.Text("+" .. hidden)
+                    end,
+                }
+            )
+        end)
+        assert.equal("1one two", trimmed(rows[1]))
+        assert.equal(" three", trimmed(rows[2]))
+        assert.equal("+2", trimmed(rows[3]))
+        assert.equal("", trimmed(rows[4]))
+    end)
+
     it("builds lines for the width a view gets", function()
         local s = screen.new(12, 3)
         local widths = {}
