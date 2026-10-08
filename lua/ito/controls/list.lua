@@ -121,7 +121,7 @@ end
 function List:arrange(frame, inner)
     local room = inner
     local reserved = 0
-    if self.foot then
+    if self.foot and #self.items > inner.height then
         local _, height = self:footing(frame, 1, 1, inner)
         reserved = math.min(height, inner.height)
         room = layout.rect(inner.x, inner.y, inner.width, inner.height - reserved)

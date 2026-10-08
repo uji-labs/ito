@@ -249,6 +249,27 @@ describe("the view controls", function()
         assert.equal("•••█", trimmed(rows[1]))
     end)
 
+    it("shows a list's footer only while some of its items do not fit", function()
+        local s = screen.new(20, 6)
+        local function shown(items)
+            return s:show(function()
+                return kit.VStack({
+                    kit.List(items, function(item)
+                        return kit.Text(item)
+                    end)
+                        :footer(function(first, last, total)
+                            return kit.Text(first .. "-" .. last .. " of " .. total)
+                        end)
+                        :max_height(3),
+                })
+            end)
+        end
+        local long = shown({ "a", "b", "c", "d" })
+        assert.same({ "a", "b", "1-2 of 4" }, { trimmed(long[1]), trimmed(long[2]), trimmed(long[3]) })
+        local short = shown({ "a", "b" })
+        assert.same({ "a", "b", "" }, { trimmed(short[1]), trimmed(short[2]), trimmed(short[3]) })
+    end)
+
     it("builds only the rows a list shows and moves through them with keys and the wheel", function()
         local s = screen.new(30, 5)
         local items, built, chosen = {}, {}, nil
