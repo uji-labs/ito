@@ -197,6 +197,22 @@ describe("the view kit", function()
         assert.equal("     ten", trimmed(rows[4]))
     end)
 
+    it("narrows the widest shrinking columns of a grid too wide for its room", function()
+        local rows = screen.new(20, 3):show(function()
+            return kit.Grid({
+                kit.GridRow({
+                    kit.Text("ab"):shrink(),
+                    kit.Text("|"):repeating(),
+                    kit.Text("one two three four five six"):wrap():shrink(),
+                    kit.Text("|"):repeating(),
+                    kit.Text("end"):wrap():shrink():grow(),
+                }),
+            })
+        end)
+        assert.equal("ab|one two three|end", rows[1])
+        assert.equal("  |four five six|", trimmed(rows[2]))
+    end)
+
     it("builds lines for the width a view gets", function()
         local s = screen.new(12, 3)
         local widths = {}

@@ -31,25 +31,55 @@ function GridRow:arrange(frame, inner)
     end
 end
 
+local function level(widths, room)
+    local sorted = {}
+    for _, width in pairs(widths) do
+        sorted[#sorted + 1] = width
+    end
+    table.sort(sorted)
+    for index, width in ipairs(sorted) do
+        local left = #sorted - index + 1
+        if width * left > room then
+            return math.floor(math.max(room, 0) / left)
+        end
+        room = room - width
+    end
+    return math.huge
+end
+
 local function columns(grid, frame, width)
     local room = layout.rect(0, 0, width, 0)
-    local widest, weights, count = {}, {}, 0
+    local widest, weights, shrinks, count = {}, {}, {}, 0
     for _, row in ipairs(grid.composed or {}) do
         if getmetatable(row) == GridRow then
             for index, cell in ipairs(row.composed or {}) do
                 count = math.max(count, index)
                 local extent = cell:extent(frame, room, false)
-                if type(extent) == "number" then
-                    widest[index] = math.max(widest[index] or 0, extent)
-                else
+                if type(extent) ~= "number" then
                     weights[index] = math.max(weights[index] or 0, extent.weight)
+                    extent = cell.shrinks and cell:natural_width(frame) or 0
                 end
+                widest[index] = math.max(widest[index] or 0, extent)
+                shrinks[index] = shrinks[index] or cell.shrinks
             end
         end
     end
+    local fixed, narrowing = 0, {}
+    for index = 1, count do
+        if shrinks[index] then
+            narrowing[index] = widest[index] or 0
+        elseif not weights[index] then
+            fixed = fixed + (widest[index] or 0)
+        end
+    end
+    local cap = level(narrowing, width - fixed)
     local extents = {}
     for index = 1, count do
-        extents[index] = weights[index] and { weight = weights[index] } or widest[index] or 0
+        if weights[index] then
+            extents[index] = { weight = weights[index] }
+        else
+            extents[index] = math.min(widest[index] or 0, shrinks[index] and cap or math.huge)
+        end
     end
     return layout.stack(room, extents, false)
 end
