@@ -137,6 +137,9 @@ function List:arrange(frame, inner)
     if cursor > 0 and cursor < offset then
         offset = cursor
     end
+    if inner.height > 0 and cursor - offset >= inner.height then
+        offset = cursor - inner.height + 1
+    end
     local placed, used = self:rows(frame, offset, inner)
     while cursor > 0 and offset < cursor do
         local last = placed[#placed]

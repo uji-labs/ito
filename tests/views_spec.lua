@@ -249,6 +249,27 @@ describe("the view controls", function()
         assert.equal("•••█", trimmed(rows[1]))
     end)
 
+    it("jumps a list to a far chosen row without building the rows on the way", function()
+        local s = screen.new(10, 3)
+        local items, built = {}, 0
+        for index = 1, 5000 do
+            items[index] = "row " .. index
+        end
+        local chosen = kit.state(1)
+        local rows
+        s:show(function()
+            return kit.List(items, function(item)
+                built = built + 1
+                return kit.Text(item)
+            end):selection(chosen)
+        end)
+        built = 0
+        chosen.value = 5000
+        rows = s:rows()
+        assert.same({ "row 4998", "row 4999", "row 5000" }, { trimmed(rows[1]), trimmed(rows[2]), trimmed(rows[3]) })
+        assert.is_true(built < 20, built .. " rows built")
+    end)
+
     it("shows a list's footer only while some of its items do not fit", function()
         local s = screen.new(20, 6)
         local function shown(items)
