@@ -33,6 +33,89 @@ describe("the view kit", function()
         assert.equal("196", s.screen:spans(3)[1].fg)
     end)
 
+    it("wraps text made of styled spans to the width it gets", function()
+        local s = screen.new(10, 5)
+        local rows = s:show(function()
+            return kit.HStack({
+                kit.Text("> "),
+                kit.Text({ { "Bash", kit.TextStyle({ bold = true }) }, { "(echo one two three)" } }):wrap():grow(),
+            })
+        end)
+        assert.equal("> Bash(ech", rows[1])
+        assert.equal("  o one", trimmed(rows[2]))
+        assert.equal("  two", trimmed(rows[3]))
+        assert.equal("  three)", trimmed(rows[4]))
+        assert.same({ "bold" }, s.screen:spans(0)[2].modifiers)
+        local lines = s:show(function()
+            return kit.Text({ { "a\n" }, { "b" } })
+        end)
+        assert.equal("a", trimmed(lines[1]))
+        assert.equal("b", trimmed(lines[2]))
+    end)
+
+    it("repeats a text down the height a row gives it", function()
+        local s = screen.new(8, 4)
+        local rows = s:show(function()
+            return kit.VStack({
+                kit.HStack({ kit.Text("| "):repeating(), kit.Text("one two three"):wrap():grow() }),
+            })
+        end)
+        assert.equal("| one", trimmed(rows[1]))
+        assert.equal("| two", trimmed(rows[2]))
+        assert.equal("| three", trimmed(rows[3]))
+        assert.equal("", trimmed(rows[4]))
+        local rule = s:show(function()
+            return kit.VStack({ kit.HStack({ kit.Text("-"):repeating():grow(), kit.Text(" x "), kit.Text("-"):repeating():grow() }) })
+        end)
+        assert.equal("-- x ---", rule[1])
+    end)
+
+    it("takes rows from a shrinking view when its stack runs out of room", function()
+        local s = screen.new(10, 4)
+        local rows = s:show(function()
+            return kit.VStack({
+                kit.Text("title"),
+                kit.ScrollView(kit.Text("1\n2\n3\n4\n5")):shrink(),
+                kit.Text("yes"),
+            })
+        end)
+        assert.equal("title", trimmed(rows[1]))
+        assert.equal("1", trimmed(rows[2]))
+        assert.equal("2", trimmed(rows[3]))
+        assert.equal("yes", trimmed(rows[4]))
+        local short = s:show(function()
+            return kit.VStack({ kit.Text("title"), kit.ScrollView(kit.Text("1")):shrink(), kit.Text("yes") })
+        end)
+        assert.equal("1", trimmed(short[2]))
+        assert.equal("yes", trimmed(short[3]))
+    end)
+
+    it("folds content past a number of rows and shows what it hid", function()
+        local s = screen.new(12, 6)
+        local rows = s:show(function()
+            return kit.Fold(kit.Text("1\n2\n3\n4\n5"), {
+                rows = 2,
+                more = function(hidden)
+                    return kit.Text("+" .. hidden .. " more")
+                end,
+            })
+        end)
+        assert.equal("1", trimmed(rows[1]))
+        assert.equal("2", trimmed(rows[2]))
+        assert.equal("+3 more", trimmed(rows[3]))
+        assert.equal("", trimmed(rows[4]))
+        local short = s:show(function()
+            return kit.Fold(kit.Text("1\n2"), {
+                rows = 2,
+                more = function(hidden)
+                    return kit.Text("+" .. hidden)
+                end,
+            })
+        end)
+        assert.equal("2", trimmed(short[2]))
+        assert.equal("", trimmed(short[3]))
+    end)
+
     it("builds lines for the width a view gets", function()
         local s = screen.new(12, 3)
         local widths = {}

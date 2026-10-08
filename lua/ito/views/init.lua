@@ -10,4 +10,5 @@ return {
     Group = require("ito.views.group"),
     Layout = require("ito.views.layout"),
     SubcomposeLayout = require("ito.views.subcompose"),
+    Fold = require("ito.views.fold"),
 }

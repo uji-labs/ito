@@ -97,6 +97,11 @@ return function(View)
         return self
     end
 
+    function View:shrink()
+        self.shrinks = true
+        return self
+    end
+
     function View:grow(weight)
         weight = weight or 1
         if type(weight) ~= "number" or weight <= 0 then
