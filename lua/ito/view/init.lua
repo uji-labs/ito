@@ -207,7 +207,7 @@ end
 function View:draw_content() end
 
 function View:draw(frame)
-    if self.is_hidden then
+    if self.is_hidden or self.is_invisible then
         return
     end
     local outer = frame.scope
@@ -230,7 +230,10 @@ function View:paint(frame)
     end
     self:draw_content(frame)
     for _, child in ipairs(self.composed or {}) do
-        child:draw(frame)
+        local rect = child.rect
+        if not rect or (rect.width > 0 and rect.height > 0) then
+            child:draw(frame)
+        end
     end
     self:draw_extras(frame)
     if self.click then

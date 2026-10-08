@@ -1,0 +1,19 @@
+---
+base: lua51
+name: ito
+lua_versions:
+  - luajit
+globals:
+  table.unpack:
+    any: true
+  package.searchers:
+    any: true
+  io.stdout:
+    any: true
+  io.stderr:
+    any: true
+  error:
+    args:
+      - type: any
+      - type: number
+        required: false

@@ -46,22 +46,35 @@ function Text:repeating()
     return self
 end
 
+local TAB = "    "
+
+local function expanded(value)
+    if value:find("\t", 1, true) then
+        return (value:gsub("\t", TAB))
+    end
+    return value
+end
+
 local function split(content, style)
     if type(content) == "string" then
         local out = {}
         for index, line in ipairs(text.lines(content)) do
-            out[index] = { { line, style } }
+            out[index] = { { expanded(line), style } }
         end
-        return out
+        return out, false
     end
     local plain = style == text_style.plain
-    local out, line = {}, {}
+    local out, line, marked = {}, {}, false
     for _, span in ipairs(content) do
         local kept = span[2] and (plain and span[2] or style:merge(span[2])) or style
-        local value = span[1]
+        local value = expanded(span[1])
         if not value:find("\n", 1, true) then
             if value ~= "" then
-                line[#line + 1] = { value, kept }
+                local piece = { value, kept }
+                if span.cursor then
+                    piece.cursor, marked = true, true
+                end
+                line[#line + 1] = piece
             end
         else
             local first = true
@@ -78,13 +91,14 @@ local function split(content, style)
         end
     end
     out[#out + 1] = line
-    return out
+    return out, marked
 end
 
 function Text:lines()
     local style = self.text_style
     if self.lines_style ~= style then
-        self.lines_style, self.made_lines = style, split(self.content, style)
+        self.lines_style = style
+        self.made_lines, self.marked = split(self.content, style)
         self.rows_width = nil
     end
     return self.made_lines
@@ -129,6 +143,31 @@ local function tiled(row, width)
     return out
 end
 
+local function cursor_row(rows)
+    for index, row in ipairs(rows) do
+        for _, span in ipairs(row) do
+            if span.cursor then
+                return index
+            end
+        end
+    end
+end
+
+function Text:followed(rows, height)
+    if self.followed_rows ~= rows then
+        self.followed_rows, self.cursor_at = rows, cursor_row(rows)
+    end
+    local at = self.cursor_at
+    if not at or at <= height then
+        return rows
+    end
+    local out = {}
+    for index = at - height + 1, at do
+        out[#out + 1] = rows[index]
+    end
+    return out
+end
+
 function Text:draw_content(frame)
     local inner = self.inner
     local rows = self:rows(inner.width)
@@ -138,6 +177,8 @@ function Text:draw_content(frame)
             filled[index] = tiled(rows[(index - 1) % #rows + 1], inner.width)
         end
         rows = filled
+    elseif self.marked and #rows > inner.height then
+        rows = self:followed(rows, inner.height)
     end
     frame:lines(inner, rows)
 end

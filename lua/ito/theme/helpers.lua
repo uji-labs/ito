@@ -22,7 +22,7 @@ function M.typed(ctx, field, styles)
         before = value:sub(1, field.cursor)
         after = value:sub(field.cursor + 1)
     end
-    return { { before, styles.text }, { ctx.symbols.cursor, styles.cursor }, { after, styles.text } }
+    return { { before, styles.text }, { ctx.symbols.cursor, styles.cursor, cursor = true }, { after, styles.text } }
 end
 
 return M

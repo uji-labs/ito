@@ -84,6 +84,11 @@ return function(View)
         return self
     end
 
+    function View:invisible(hide)
+        self.is_invisible = hide ~= false
+        return self
+    end
+
     function View:focus_scope(value)
         if value == nil then
             error("focus_scope needs a value", 2)
@@ -93,7 +98,12 @@ return function(View)
     end
 
     function View:title(title)
-        self.heading = title
+        local heading = { { " " } }
+        for _, span in ipairs(type(title) == "string" and { { title } } or title) do
+            heading[#heading + 1] = span
+        end
+        heading[#heading + 1] = { " " }
+        self.heading = heading
         return self
     end
 

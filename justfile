@@ -16,4 +16,6 @@ check: module
     cargo clippy --all-targets --features module,luajit --target-dir target -- -D warnings
     stylua --check lua tests
     luacheck lua tests
+    selene lua
+    selene --config .config/selene/tests.toml tests
     luajit tests/run.lua

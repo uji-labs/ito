@@ -1,0 +1,7 @@
+std = "busted"
+exclude = ["tests/vendor/**"]
+
+[lints]
+mixed_table = "allow"
+high_cyclomatic_complexity = "deny"
+global_usage = "allow"

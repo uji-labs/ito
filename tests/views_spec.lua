@@ -22,7 +22,7 @@ describe("the view kit", function()
             return kit.VStack({
                 kit.Text("top"):padding({ horizontal = 2 }),
                 kit.Spacer(),
-                kit.Text("in"):padding(1):border(ctx.borders.rounded, { color = kit.Color.indexed(196) }):title(" t "),
+                kit.Text("in"):padding(1):border(ctx.borders.rounded, { color = kit.Color.indexed(196) }):title("t"),
             })
         end)
         assert.equal("  top", trimmed(rows[1]))
@@ -114,6 +114,87 @@ describe("the view kit", function()
         end)
         assert.equal("2", trimmed(short[2]))
         assert.equal("", trimmed(short[3]))
+    end)
+
+    it("keeps the room of an invisible view and draws nothing there", function()
+        local rows = screen.new(10, 2):show(function()
+            return kit.VStack({
+                kit.HStack({ kit.Text(">"):invisible(), kit.Text("a") }),
+                kit.HStack({ kit.Text(">"):invisible(false), kit.Text("b") }),
+            })
+        end)
+        assert.equal(" a", trimmed(rows[1]))
+        assert.equal(">b", trimmed(rows[2]))
+    end)
+
+    it("puts spacing between the views of a stack, past the hidden ones", function()
+        local s = screen.new(12, 5)
+        local rows = s:show(function()
+            return kit.VStack({
+                kit.HStack({ kit.Text("a"), kit.Text("x"):hidden(), kit.Text("b"), kit.Text("c") }):spacing(2),
+                kit.Text("d"),
+                kit.Text("e"),
+            }):spacing(1)
+        end)
+        assert.equal("a  b  c", trimmed(rows[1]))
+        assert.equal("", trimmed(rows[2]))
+        assert.equal("d", trimmed(rows[3]))
+        assert.equal("", trimmed(rows[4]))
+        assert.equal("e", trimmed(rows[5]))
+        local right = s:show(function()
+            return kit.VStack({ kit.HStack({ kit.Text("a"), kit.Text("b") }):spacing(1):align(kit.Alignment.trailing) })
+        end)
+        assert.equal("         a b", right[1])
+    end)
+
+    it("draws a tab as four columns", function()
+        local rows = screen.new(12, 2):show(function()
+            return kit.VStack({ kit.Text("a\tb"), kit.Text({ { "\tc" } }) })
+        end)
+        assert.equal("a    b", trimmed(rows[1]))
+        assert.equal("    c", trimmed(rows[2]))
+    end)
+
+    it("keeps the row with a typed cursor in view when the text has more rows than its room", function()
+        local s = screen.new(8, 4)
+        local function field(cursor)
+            return s:show(function(ctx)
+                local typed = ctx:typed(
+                    { text = "one\ntwo\nthree\nfour", cursor = cursor },
+                    { text = ctx.styles.text, cursor = ctx.styles.cursor }
+                )
+                return kit.VStack({ kit.Text(typed):max_height(2), kit.Text("end") })
+            end)
+        end
+        local top = field(7)
+        assert.equal("one", trimmed(top[1]))
+        assert.truthy(top[2]:find("^two"))
+        local lower = field(13)
+        assert.equal("two", trimmed(lower[1]))
+        assert.truthy(lower[2]:find("^three"))
+        assert.equal("end", trimmed(lower[3]))
+    end)
+
+    it("sizes each column of a grid to its widest cell and gives the rest to the one that grows", function()
+        local rows = screen.new(14, 4):show(function()
+            return kit.Grid({
+                kit.GridRow({
+                    kit.Text("9"):align(kit.Alignment.trailing),
+                    kit.Text("-"):padding({ horizontal = 1 }),
+                    kit.Text("nine"):grow(),
+                }),
+                kit.Text("…"),
+                kit.GridRow({
+                    kit.Text("10"):align(kit.Alignment.trailing),
+                    kit.Text("+"):padding({ horizontal = 1 }),
+                    kit.Text("ten ten ten"):wrap():grow(),
+                }),
+            })
+        end)
+        assert.equal(" 9 - nine", trimmed(rows[1]))
+        assert.equal("…", trimmed(rows[2]))
+        assert.equal("10 + ten ten", trimmed(rows[3]))
+        assert.equal("     ten", trimmed(rows[4]))
     end)
 
     it("builds lines for the width a view gets", function()

@@ -5,8 +5,6 @@ local View = require("ito.view")
 
 local Fold = class(View)
 
-Fold.live = true
-
 function Fold:init(content, opts)
     View.init(self, {})
     opts = opts or {}
@@ -26,17 +24,26 @@ function Fold:compose(composition, node, environment)
 end
 
 function Fold:parts(frame, width)
-    local content = self.composition:place(self.inside, self.node, 1, self.environment)
+    local content = self.composition:place(self.inside, self.node, "content", self.environment)
     if not content then
         return nil, 0
     end
-    local total = content:measure(frame, width)
-    if not self.limit or total <= self.limit then
-        return content, total
+    local known = self.known
+    if not known or known.width ~= width or known.content ~= content or not content:steady() then
+        known = { width = width, content = content, total = content:measure(frame, width) }
+        self.known = known
     end
-    local hidden = total - self.limit
-    local more = self.more and self.composition:place(runtime.Build({ build = self.more, value = hidden }), self.node, 2, self.environment)
-    return content, self.limit, more
+    if not self.limit or known.total <= self.limit then
+        return content, known.total
+    end
+    if not self.more then
+        return content, self.limit
+    end
+    local hidden = known.total - self.limit
+    if known.hidden ~= hidden then
+        known.hidden, known.below = hidden, runtime.Build({ build = self.more, value = hidden })
+    end
+    return content, self.limit, self.composition:place(known.below, self.node, "more", self.environment)
 end
 
 function Fold:content_height(frame, width)
