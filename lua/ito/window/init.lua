@@ -6,6 +6,8 @@ local layout = require("ito.layout")
 local Selection = require("ito.window.selection")
 local Theme = require("ito.runtime.environment").Theme
 
+local EDGE = 0.05
+
 local Window = class()
 
 function Window:init(screen, invalidate)
@@ -33,6 +35,7 @@ function Window:draw(root, frame)
         root:draw(frame)
     end
     self.selection:capture_screen(self.screen)
+    self:follow(frame)
     self:settle(frame)
     return frame
 end
@@ -53,10 +56,37 @@ function Window:panes(frame)
                 self.pane_of[scroll] = pane
             end
             pane.top, pane.height, pane.shift = viewport.top, viewport.height, viewport.top - viewport.first
+            pane.target = entry.target
             panes[#panes + 1] = pane
         end
     end
     return panes
+end
+
+local function past(pane, row, height)
+    local top, bottom = pane.top, pane.top + pane.height - 1
+    if row < top or (row == top and top == 0) then
+        return math.min(row - top, -1)
+    end
+    if row > bottom or (row == bottom and bottom == height - 1) then
+        return math.max(row - bottom, 1)
+    end
+    return 0
+end
+
+function Window:follow(frame)
+    local pointer, selection = self.pointer, self.selection
+    local pane = selection.range and selection.pane
+    if not pointer or not pane or not pane.target then
+        return
+    end
+    selection:drag(pointer.col, pointer.row)
+    local _, height = self.screen:size()
+    local rows = past(pane, pointer.row, height)
+    if rows ~= 0 then
+        pane.target:scroll(rows)
+        frame:again(EDGE)
+    end
 end
 
 function Window:settle(frame)
@@ -115,16 +145,19 @@ function Window:wheel(row, col, rows)
 end
 
 function Window:press(row, col)
+    self.pointer = nil
     self.clicking = self.screen:clicked(row, col)
     self.selection:press(col, row, host.clock())
 end
 
 function Window:drag(row, col)
+    self.pointer = { row = row, col = col }
     self.clicking = nil
     self.selection:drag(col, row)
 end
 
 function Window:release(event)
+    self.pointer = nil
     local click = self.clicking
     self.clicking = nil
     local copied = self.selection:release()

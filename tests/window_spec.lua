@@ -78,4 +78,50 @@ describe("window", function()
         s:rows()
         assert.is_nil(window.selection.range)
     end)
+
+    it("scrolls a lazy stack while a drag holds past its edge, and the selection follows", function()
+        local s = screen.new(12, 5)
+        local items = {}
+        for index = 1, 50 do
+            items[index] = "row " .. index
+        end
+        local scroll = kit.ScrollState()
+        scroll:to_top()
+        s:show(function()
+            return kit.ZStack({
+                alignment = kit.Alignment.top_leading,
+                kit.VStack({
+                    kit.Text("top"),
+                    kit.LazyVStack(items, function(item)
+                        return kit.Text(item)
+                    end)
+                        :state(scroll)
+                        :grow(),
+                    kit.Text("bottom"),
+                }):grow(),
+                kit.SelectionHighlight(),
+            })
+        end)
+        local window = s.window
+        window:press(1, 0)
+        window:drag(4, 5)
+        local rows
+        for _ = 1, 4 do
+            rows = s:rows()
+        end
+        assert.equal("row 4", screen.trimmed(rows[2]))
+        assert.equal(0.05, s.frame.wake)
+        window:drag(2, 5)
+        s:rows()
+        assert.is_nil(s.frame.wake)
+        assert.equal("row 1\nrow 2\nrow 3\nrow 4\nrow 5\nrow 6", window:release())
+        window:press(3, 5)
+        window:drag(0, 0)
+        for _ = 1, 3 do
+            rows = s:rows()
+        end
+        assert.equal("row 3", screen.trimmed(rows[2]))
+        assert.equal(0.05, s.frame.wake)
+        assert.equal("row 3\nrow 4\nrow 5\nrow 6\nrow 7", window:release())
+    end)
 end)

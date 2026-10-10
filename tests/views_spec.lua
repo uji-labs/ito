@@ -833,6 +833,26 @@ describe("the view controls", function()
         assert.same({ "short", "b1", "b2" }, { trimmed(shown[1]), trimmed(shown[2]), trimmed(shown[3]) })
     end)
 
+    it("gives a lazy stack the height it is given", function()
+        local items = {}
+        for index = 1, 10 do
+            items[index] = "row " .. index
+        end
+        local scroll = kit.ScrollState()
+        scroll:to_top()
+        local rows = screen.new(10, 5):show(function()
+            return kit.VStack({
+                kit.LazyVStack(items, function(item)
+                    return kit.Text(item)
+                end)
+                    :state(scroll)
+                    :height(3),
+                kit.Text("end"),
+            })
+        end)
+        assert.same({ "row 1", "row 2", "row 3", "end" }, { trimmed(rows[1]), trimmed(rows[2]), trimmed(rows[3]), trimmed(rows[4]) })
+    end)
+
     it("stays at the end of a lazy stack when scrolled down past it", function()
         local s = screen.new(10, 3)
         local items = {}

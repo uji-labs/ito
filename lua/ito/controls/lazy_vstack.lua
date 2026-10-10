@@ -133,7 +133,7 @@ function LazyVStack:start(width)
     self.memo.heights = self.heights
 end
 
-function LazyVStack:height(frame, index, sub)
+function LazyVStack:row_height(frame, index, sub)
     return self:entry(frame, index, sub).height
 end
 
@@ -172,7 +172,7 @@ function LazyVStack:from_end(frame, room)
     local total = 0
     local index, sub = self:previous(#self.items + 1, 0)
     while index do
-        total = total + self:height(frame, index, sub)
+        total = total + self:row_height(frame, index, sub)
         if total >= room then
             return index, sub, total - room
         end
@@ -193,15 +193,15 @@ function LazyVStack:shifted(frame, index, sub, offset, rows)
             break
         end
         index, sub = before_index, before_sub
-        offset = offset + self:height(frame, index, sub)
+        offset = offset + self:row_height(frame, index, sub)
     end
     offset = math.max(offset, 0)
-    while offset >= self:height(frame, index, sub) do
+    while offset >= self:row_height(frame, index, sub) do
         local after_index, after_sub = self:next(index, sub)
         if not after_index then
             break
         end
-        offset = offset - self:height(frame, index, sub)
+        offset = offset - self:row_height(frame, index, sub)
         index, sub = after_index, after_sub
     end
     return index, sub, offset
@@ -210,7 +210,7 @@ end
 function LazyVStack:below(frame, index, sub, offset, limit)
     local total = -offset
     while index and total < limit do
-        total = total + self:height(frame, index, sub)
+        total = total + self:row_height(frame, index, sub)
         index, sub = self:next(index, sub)
     end
     return math.max(total, 0)
@@ -227,7 +227,7 @@ function LazyVStack:distance(frame, from, to, limit)
         if total > limit then
             return total, false
         end
-        total = total + self:height(frame, index, sub)
+        total = total + self:row_height(frame, index, sub)
         index, sub = self:next(index, sub)
     end
     return total, true
@@ -285,7 +285,7 @@ function LazyVStack:content_height(frame, width)
     local total = 0
     local index, sub = self:first()
     while index do
-        total = total + self:height(frame, index, sub)
+        total = total + self:row_height(frame, index, sub)
         index, sub = self:next(index, sub)
     end
     return total
