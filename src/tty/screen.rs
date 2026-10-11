@@ -6,6 +6,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 
 mod area;
+mod link;
 mod read;
 mod style;
 mod targets;
@@ -16,6 +17,7 @@ use crate::convert;
 
 use super::surface::{Cursor, Shape, Surface};
 use area::{Area, region};
+use link::Link;
 use read::{Run, runs};
 use style::text_style;
 use targets::Targets;
@@ -81,11 +83,12 @@ impl Screen {
     }
 
     fn span(&mut self, at: (u16, u16), right: u16, span: Value) -> mlua::Result<u16> {
-        let (text, style) = match span {
-            Value::String(text) => (text, Style::default()),
+        let (text, style, link) = match span {
+            Value::String(text) => (text, Style::default(), None),
             Value::Table(span) => (
                 span.raw_get::<LuaString>(1)?,
                 self.resolve(&span.raw_get::<Value>(2)?)?,
+                span.raw_get::<Option<String>>("link")?,
             ),
             other => {
                 return Err(io::Error::other(format!(
@@ -95,7 +98,10 @@ impl Screen {
                 .into());
             }
         };
-        Ok(self.put(at, right, &String::from_utf8_lossy(&text.as_bytes()), style))
+        let link = link.as_deref().map(Link::new).transpose()?;
+        let end = self.put(at, right, &String::from_utf8_lossy(&text.as_bytes()), style);
+        Link::apply(link.as_ref(), self.surface.buffer(), at.1, at.0, end);
+        Ok(end)
     }
 
     fn cover(&mut self, area: Rect, style: Style, symbol: &str) {

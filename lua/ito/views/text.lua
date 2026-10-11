@@ -72,7 +72,7 @@ local function split(content, style)
         local value = expanded(span[1])
         if not value:find("\n", 1, true) then
             if value ~= "" then
-                local piece = { value, kept }
+                local piece = { value, kept, link = span.link }
                 if span.cursor then
                     piece.cursor, marked = true, true
                 end
@@ -87,7 +87,7 @@ local function split(content, style)
                 first = false
                 part = part:gsub("\r$", "")
                 if part ~= "" then
-                    line[#line + 1] = { part, kept }
+                    line[#line + 1] = { part, kept, link = span.link }
                 end
             end
         end
