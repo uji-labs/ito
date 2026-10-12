@@ -1,22 +1,7 @@
 local class = require("ito.class")
 local Line = require("ito.line")
-local text = require("ito.text")
+local typing = require("ito.typing")
 local View = require("ito.view")
-
-local SINGLE = "^" .. text.CHAR .. "$"
-
-local function typed(chord)
-    return not chord.ctrl and not chord.alt and type(chord.key) == "string" and chord.key:match(SINGLE) ~= nil
-end
-
-local EDITS = {
-    left = "left",
-    right = "right",
-    home = "home",
-    ["end"] = "tail",
-    backspace = "backspace",
-    delete = "delete_forward",
-}
 
 local TextField = class(View)
 
@@ -78,14 +63,12 @@ end
 
 function TextField:handle(chord)
     local line = self:field()
-    if typed(chord) then
+    if typing.typed(chord) then
         line:insert(chord.key)
     elseif chord.key == "enter" and self.submit then
         self.submit(line.text)
         return true
-    elseif EDITS[chord.key] then
-        line[EDITS[chord.key]](line)
-    else
+    elseif not typing.edit(line, chord.key) then
         return false
     end
     self.value.value = line.text

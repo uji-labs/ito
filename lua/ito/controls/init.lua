@@ -1,5 +1,6 @@
 return {
     TextField = require("ito.controls.text_field"),
+    Choices = require("ito.controls.choices"),
     List = require("ito.controls.list"),
     ScrollView = require("ito.controls.scroll_view"),
     ScrollState = require("ito.controls.scroll_state"),
