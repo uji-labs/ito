@@ -1,5 +1,6 @@
 use std::io;
 
+use crate::image::kitty::Images;
 use ratatui::buffer::Buffer;
 
 #[derive(Clone, Copy)]
@@ -30,7 +31,11 @@ pub(crate) struct Cursor {
 pub(crate) trait Surface {
     fn buffer(&mut self) -> &mut Buffer;
     fn size(&mut self) -> io::Result<(u16, u16)>;
-    fn present(&mut self, cursor: Option<Cursor>) -> io::Result<()>;
+    fn present(&mut self, cursor: Option<Cursor>, images: &mut Images) -> io::Result<()>;
+    fn reset_images(&mut self, images: &mut Images) -> io::Result<()>;
+    fn cell_size(&self) -> Option<(u16, u16)> {
+        None
+    }
     fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
     fn suspend(&mut self) -> io::Result<()>;
     fn resume(&mut self) -> io::Result<()>;

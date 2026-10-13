@@ -1,6 +1,6 @@
 use mlua::{Function, Lua, Table, Value};
 
-use crate::{FILES, tty};
+use crate::{FILES, image, tty};
 
 const ROOT: &str = "ito";
 const TERMINAL: &str = "ito.tty";
@@ -26,6 +26,10 @@ pub fn load(lua: &Lua) -> mlua::Result<Value> {
         }
     }
     preload.set(TERMINAL, lua.create_function(|lua, ()| tty::module(lua))?)?;
+    preload.set(
+        "ito.image_native",
+        lua.create_function(|lua, ()| image::module(lua))?,
+    )?;
     let root: Function = root.ok_or_else(|| mlua::Error::runtime("ito has no init.lua"))?;
     root.call(ROOT)
 }

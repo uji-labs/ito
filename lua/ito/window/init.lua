@@ -126,13 +126,17 @@ function Window:key(chord)
 end
 
 function Window:scrollable_at(row, col)
+    local found
     for index = #self.scrollables, 1, -1 do
         local entry = self.scrollables[index]
         local rect = entry.rect
-        if row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width then
-            return entry.target
+        if entry.scope == self.scope and row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width then
+            if not found or entry.priority > found.priority then
+                found = entry
+            end
         end
     end
+    return found and found.target
 end
 
 function Window:wheel(row, col, rows)

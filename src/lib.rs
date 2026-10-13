@@ -1,6 +1,7 @@
 include!(concat!(env!("OUT_DIR"), "/files.rs"));
 
 mod convert;
+mod image;
 mod module;
 pub mod tty;
 

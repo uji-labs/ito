@@ -1,4 +1,6 @@
 return {
+    ImageViewer = require("ito.controls.image_viewer"),
+    ImageViewport = require("ito.controls.image_viewport"),
     TextField = require("ito.controls.text_field"),
     Choices = require("ito.controls.choices"),
     List = require("ito.controls.list"),

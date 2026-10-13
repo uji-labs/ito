@@ -57,8 +57,8 @@ function Frame:focusable(target, handle, wanted)
     self.focusables[#self.focusables + 1] = { target = target, handle = handle, wanted = wanted, scope = self.scope }
 end
 
-function Frame:scrollable(rect, target, state)
-    self.scrollables[#self.scrollables + 1] = { rect = rect, target = target, state = state, scope = self.scope }
+function Frame:scrollable(rect, target, state, priority)
+    self.scrollables[#self.scrollables + 1] = { rect = rect, target = target, state = state, scope = self.scope, priority = priority or 0 }
 end
 
 function Frame:again(seconds)

@@ -2,10 +2,10 @@ use ratatui::layout::Rect;
 
 #[derive(serde::Deserialize)]
 pub(super) struct Area {
-    x: i64,
-    y: i64,
-    width: i64,
-    height: i64,
+    pub(super) x: i64,
+    pub(super) y: i64,
+    pub(super) width: i64,
+    pub(super) height: i64,
 }
 
 impl Area {
