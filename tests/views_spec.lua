@@ -116,6 +116,37 @@ describe("the view kit", function()
         assert.equal("", trimmed(short[3]))
     end)
 
+    it("draws nothing for a composed view that was given no place to draw in", function()
+        local class = require("ito.class")
+        local View = kit.View
+        local Careless = class(View)
+        function Careless:init(child)
+            View.init(self, { child })
+        end
+        function Careless:content_height()
+            return 1
+        end
+        function Careless:arrange() end
+        local rows = screen.new(12, 2):show(function()
+            return kit.VStack({ Careless(kit.Text("skipped"):padding({ top = 1 })), kit.Text("end") })
+        end)
+        assert.equal("", trimmed(rows[1]))
+        assert.equal("end", trimmed(rows[2]))
+    end)
+
+    it("lays a fold out again whenever it is measured, as it places its content then", function()
+        local folded = kit.Fold(kit.Text("one\ntwo"), {
+            rows = 1,
+            more = function()
+                return kit.Text("+ 1")
+            end,
+        })
+        screen.new(12, 2):show(function()
+            return folded
+        end)
+        assert.is_false(folded:steady(), "a fold places its content whenever it is measured")
+    end)
+
     it("keeps the room of an invisible view and draws nothing there", function()
         local rows = screen.new(10, 2):show(function()
             return kit.VStack({

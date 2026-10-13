@@ -5,6 +5,8 @@ local View = require("ito.view")
 
 local Fold = class(View)
 
+Fold.live = true
+
 function Fold:init(content, opts)
     View.init(self, {})
     opts = opts or {}
