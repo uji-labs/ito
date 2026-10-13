@@ -13,6 +13,11 @@ mod targets;
 
 pub(crate) use read::row_text;
 
+#[cfg(feature = "canvas")]
+pub(super) fn cell_contents(symbol: &str) -> (Option<&str>, &str) {
+    Link::split(symbol)
+}
+
 use crate::convert;
 use crate::image::{
     Options, Phase, Source,

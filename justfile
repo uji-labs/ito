@@ -1,6 +1,10 @@
 default:
     @just --list
 
+# Compile the Canvas browser demo with Emscripten.
+web:
+    bash web/build.sh
+
 # Build the native Lua module that the tests load.
 module:
     cargo build --release --features module,luajit --target-dir target

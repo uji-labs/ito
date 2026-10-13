@@ -14,14 +14,24 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 base64 = "0.22"
-crossterm = "0.29"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 mlua = { version = "0.12", features = ["serde", "async"] }
-ratatui = { git = "https://github.com/ratatui/ratatui", branch = "main" }
+ratatui = { git = "https://github.com/ratatui/ratatui", branch = "main", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["rt", "sync", "time"] }
+tokio = { version = "1", features = ["sync"] }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+crossterm = "0.29"
+ratatui = { git = "https://github.com/ratatui/ratatui", branch = "main", features = ["crossterm"] }
+tokio = { version = "1", features = ["rt", "time"] }
+
+[workspace]
+members = ["web"]
+default-members = ["."]
+resolver = "2"
 
 [features]
+canvas = []
 module = ["mlua/module"]
 lua51 = ["mlua/lua51"]
 lua52 = ["mlua/lua52"]
