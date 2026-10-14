@@ -3,6 +3,7 @@ use ratatui::style::{Color, Style};
 
 use super::link::Link;
 use super::style::MODIFIERS;
+use crate::image::kitty;
 
 #[derive(serde::Serialize)]
 pub(super) struct Run {
@@ -25,6 +26,11 @@ pub(super) fn runs(buffer: &Buffer, row: u16) -> Vec<Run> {
         let cell = &buffer[(col, row)];
         let style = cell.style();
         let (link, symbol) = Link::split(cell.symbol());
+        let symbol = if kitty::is_placeholder(symbol) {
+            " "
+        } else {
+            symbol
+        };
         match out.last_mut() {
             Some((last, last_link, text)) if *last == style && *last_link == link => {
                 text.push_str(symbol);
@@ -50,6 +56,13 @@ pub(super) fn runs(buffer: &Buffer, row: u16) -> Vec<Run> {
 pub(crate) fn row_text(buffer: &Buffer, row: u16) -> String {
     let area = buffer.area;
     (area.left()..area.right())
-        .map(|col| Link::split(buffer[(col, row)].symbol()).1)
+        .map(|col| {
+            let symbol = Link::split(buffer[(col, row)].symbol()).1;
+            if kitty::is_placeholder(symbol) {
+                " "
+            } else {
+                symbol
+            }
+        })
         .collect()
 }

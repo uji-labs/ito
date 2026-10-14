@@ -42,6 +42,10 @@ function Frame:unclip(outer)
     self.clipping = outer
 end
 
+function Frame:clipped(rect)
+    return self.clipping and overlap(self.clipping, rect) or rect
+end
+
 function Frame:shows(rect)
     if rect.width <= 0 or rect.height <= 0 then
         return false
@@ -57,8 +61,8 @@ function Frame:focusable(target, handle, wanted)
     self.focusables[#self.focusables + 1] = { target = target, handle = handle, wanted = wanted, scope = self.scope }
 end
 
-function Frame:scrollable(rect, target, state)
-    self.scrollables[#self.scrollables + 1] = { rect = rect, target = target, state = state, scope = self.scope }
+function Frame:scrollable(rect, target, state, priority)
+    self.scrollables[#self.scrollables + 1] = { rect = rect, target = target, state = state, scope = self.scope, priority = priority or 0 }
 end
 
 function Frame:again(seconds)
@@ -72,14 +76,14 @@ function Frame:lines(rect, rows)
 end
 
 function Frame:clear(rect)
-    local area = self.clipping and overlap(self.clipping, rect) or rect
+    local area = self:clipped(rect)
     if area.width > 0 and area.height > 0 then
         self.screen:fill(area)
     end
 end
 
 function Frame:fill(rect, style)
-    local painted = self.clipping and overlap(self.clipping, rect) or rect
+    local painted = self:clipped(rect)
     if painted.width > 0 and painted.height > 0 then
         self.screen:paint(painted, style)
     end
@@ -101,7 +105,7 @@ function Frame:chrome(view)
         return
     end
     local style = view.border_style or self.ctx.styles.border
-    local painted = self.clipping and overlap(self.clipping, rect) or rect
+    local painted = self:clipped(rect)
     if style ~= plain and painted.width > 0 and painted.height > 0 then
         self.screen:paint(painted, style)
     end

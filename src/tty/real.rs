@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::Once;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::image::kitty::{Images, visible_ids};
 use crossterm::cursor::SetCursorStyle;
 use crossterm::event::{
     DisableBracketedPaste, EnableBracketedPaste, KeyboardEnhancementFlags,
@@ -100,7 +101,11 @@ impl Surface for Real {
         Ok((area.width, area.height))
     }
 
-    fn present(&mut self, cursor: Option<Cursor>) -> io::Result<()> {
+    fn present(&mut self, cursor: Option<Cursor>, images: &mut Images) -> io::Result<()> {
+        // Keep graphics outside cell symbols: an obscured or clipped first cell
+        // must never consume an upload that did not reach the terminal.
+        let visible = visible_ids(self.terminal.current_buffer_mut());
+        images.present(&visible, self.terminal.backend_mut())?;
         self.terminal.flush()?;
         match cursor {
             Some(cursor) => {
@@ -113,6 +118,18 @@ impl Surface for Real {
         }
         self.terminal.swap_buffers();
         Backend::flush(self.terminal.backend_mut())
+    }
+
+    fn reset_images(&mut self, images: &mut Images) -> io::Result<()> {
+        images.reset(self.terminal.backend_mut())?;
+        Write::flush(self.terminal.backend_mut())
+    }
+
+    fn cell_size(&self) -> Option<(u16, u16)> {
+        let size = crossterm::terminal::window_size().ok()?;
+        let width = size.width.checked_div(size.columns)?;
+        let height = size.height.checked_div(size.rows)?;
+        (width > 0 && height > 0).then_some((width, height))
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {

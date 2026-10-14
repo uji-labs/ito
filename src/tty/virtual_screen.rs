@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 use std::io;
 
+use crate::image::kitty::{Images, visible_ids};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
@@ -44,11 +45,19 @@ impl Surface for Virtual {
         Ok((width, height))
     }
 
-    fn present(&mut self, _cursor: Option<Cursor>) -> io::Result<()> {
+    fn present(&mut self, _cursor: Option<Cursor>, images: &mut Images) -> io::Result<()> {
+        images.present(
+            &visible_ids(self.terminal.current_buffer_mut()),
+            &mut io::sink(),
+        )?;
         self.terminal.flush().unwrap_or_else(never);
         self.terminal.swap_buffers();
         self.frames.send_replace(self.snapshot());
         Ok(())
+    }
+
+    fn reset_images(&mut self, images: &mut Images) -> io::Result<()> {
+        images.reset(&mut io::sink())
     }
 
     fn write(&mut self, _bytes: &[u8]) -> io::Result<()> {

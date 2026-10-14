@@ -14,7 +14,7 @@ local views = require("ito.views")
 
 local M = {}
 
-for _, group in ipairs({ views, controls, toolbar, style }) do
+for _, group in ipairs({ views, controls, toolbar, style, require("ito.image") }) do
     for name, value in pairs(group) do
         M[name] = value
     end

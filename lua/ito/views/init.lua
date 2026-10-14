@@ -9,6 +9,7 @@ return {
     ZStack = require("ito.views.zstack"),
     Spacer = require("ito.views.spacer"),
     Text = require("ito.views.text"),
+    Image = require("ito.views.image"),
     Lines = require("ito.views.lines"),
     Group = require("ito.views.group"),
     Layout = require("ito.views.layout"),

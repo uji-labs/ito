@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io;
 
-use mlua::{Function, LuaString, UserData, UserDataMethods, Value};
+use mlua::{AnyUserData, Function, LuaString, UserData, UserDataMethods, Value};
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
@@ -14,6 +14,10 @@ mod targets;
 pub(crate) use read::row_text;
 
 use crate::convert;
+use crate::image::{
+    Options, Phase, Source,
+    kitty::{self, Config, Images, Protocol, Setup},
+};
 
 use super::surface::{Cursor, Shape, Surface};
 use area::{Area, region};
@@ -27,6 +31,7 @@ pub struct Screen {
     styles: HashMap<usize, Style>,
     cursor: Option<Cursor>,
     targets: Targets,
+    images: Box<Images>,
 }
 
 impl Screen {
@@ -36,11 +41,16 @@ impl Screen {
             styles: HashMap::new(),
             cursor: None,
             targets: Targets::default(),
+            images: Box::default(),
         }
     }
 
     #[must_use]
     pub fn forget(mut self) -> Self {
+        let config = self.images.config;
+        let _ = self.surface.reset_images(&mut self.images);
+        self.images = Box::default();
+        self.images.config = config;
         self.targets.clear();
         self.styles.clear();
         self
@@ -122,6 +132,16 @@ impl Screen {
 
 impl Screen {
     fn size(&mut self) -> io::Result<(u16, u16)> {
+        if self.images.config.auto
+            && self.images.config.protocol == Protocol::Kitty
+            && let Some((cell_width, cell_height)) = self.surface.cell_size()
+        {
+            self.images.configure(Config {
+                cell_width,
+                cell_height,
+                ..self.images.config
+            })?;
+        }
         self.surface.size()
     }
 
@@ -172,7 +192,17 @@ impl Screen {
         let style = self.resolve(style)?;
         let buffer = self.surface.buffer();
         let area = area.rect().intersection(buffer.area);
-        buffer.set_style(area, style);
+        for row in area.top()..area.bottom() {
+            for col in area.left()..area.right() {
+                let cell = &mut buffer[(col, row)];
+                let image = kitty::is_placeholder(cell.symbol());
+                let foreground = cell.fg;
+                cell.set_style(style);
+                if image {
+                    kitty::restore_identity(cell, foreground);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -195,6 +225,7 @@ impl Screen {
     fn clear(&mut self) {
         self.surface.buffer().reset();
         self.targets.clear();
+        self.images.begin();
     }
 
     fn clicked(&mut self, row: i64, col: i64) -> Option<Function> {
@@ -218,7 +249,11 @@ impl Screen {
 
     fn flush(&mut self) -> io::Result<()> {
         self.targets.flushed();
-        self.surface.present(self.cursor)
+        let result = self.surface.present(self.cursor, &mut self.images);
+        if result.is_err() {
+            self.images.invalidate();
+        }
+        result
     }
 
     fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
@@ -226,15 +261,98 @@ impl Screen {
     }
 
     fn suspend(&mut self) -> io::Result<()> {
-        self.surface.suspend()
+        let images = self.surface.reset_images(&mut self.images);
+        let terminal = self.surface.suspend();
+        images.and(terminal)
     }
 
     fn resume(&mut self) -> io::Result<()> {
+        self.images.invalidate();
         self.surface.resume()
     }
 
     fn close(&mut self) -> io::Result<()> {
-        self.surface.close()
+        let images = self.surface.reset_images(&mut self.images);
+        let terminal = self.surface.close();
+        images.and(terminal)
+    }
+
+    fn setup_images(&mut self, setup: Setup) -> io::Result<()> {
+        self.images
+            .configure(setup.config().map_err(io::Error::other)?)?;
+        self.size()?;
+        Ok(())
+    }
+
+    fn image(
+        &mut self,
+        source: &Source,
+        area: &Area,
+        options: Options,
+        clip: Option<&Area>,
+        cached_only: bool,
+    ) -> Phase {
+        if self.images.config.protocol == Protocol::Off {
+            return Phase::Unsupported;
+        }
+        match source.pixels() {
+            None => return Phase::Loading,
+            Some(Err(error)) => return Phase::Failed(error.clone()),
+            Some(Ok(_)) => {}
+        }
+        let bounds = self.surface.buffer().area;
+        let placed = match Placement::of(area, clip, bounds) {
+            Err(problem) => return Phase::Failed(problem),
+            Ok(None) => return Phase::Ready,
+            Ok(Some(placed)) => placed,
+        };
+        match self.images.draw(
+            self.surface.buffer(),
+            source,
+            placed.rect,
+            placed.visible,
+            options,
+            cached_only,
+        ) {
+            Ok(true) => {
+                self.targets.record(placed.visible, None);
+                Phase::Ready
+            }
+            Ok(false) => Phase::Loading,
+            Err(problem) => Phase::Failed(problem),
+        }
+    }
+}
+
+// Where an image lands, in cells, and the part of it the screen can show.
+struct Placement {
+    rect: (i64, i64, u16, u16),
+    visible: Rect,
+}
+
+impl Placement {
+    fn of(area: &Area, clip: Option<&Area>, bounds: Rect) -> Result<Option<Self>, String> {
+        let visible = area
+            .rect()
+            .intersection(clip.map_or(bounds, Area::rect))
+            .intersection(bounds);
+        if visible.is_empty() {
+            return Ok(None);
+        }
+        let (Ok(width), Ok(height)) = (u16::try_from(area.width), u16::try_from(area.height))
+        else {
+            return Err("invalid image placement size".into());
+        };
+        Ok(Some(Self {
+            rect: (area.x, area.y, width, height),
+            visible,
+        }))
+    }
+}
+
+impl Drop for Screen {
+    fn drop(&mut self) {
+        let _ = self.surface.reset_images(&mut self.images);
     }
 }
 
@@ -244,6 +362,48 @@ fn raised(err: io::Error) -> mlua::Error {
 
 impl UserData for Screen {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("configure_images", |lua, screen, value: Value| {
+            let setup: Setup = convert::options(lua, value)?;
+            screen.setup_images(setup).map_err(raised)?;
+            Ok(())
+        });
+        methods.add_method("image_capabilities", |lua, screen, ()| {
+            convert::value(lua, &screen.images.config)
+        });
+        methods.add_method_mut(
+            "image",
+            |lua,
+             screen,
+             (source, area, options, clip, cached): (
+                AnyUserData,
+                Value,
+                Value,
+                Value,
+                Option<bool>,
+            )| {
+                let source = source.borrow::<Source>()?;
+                let area: Area = convert::options(lua, area)?;
+                let options: Options = convert::options(lua, options)?;
+                let clip: Option<Area> = if clip.is_nil() {
+                    None
+                } else {
+                    Some(convert::options(lua, clip)?)
+                };
+                let phase = screen.image(
+                    &source,
+                    &area,
+                    options,
+                    clip.as_ref(),
+                    cached.unwrap_or(false),
+                );
+                let status = lua.create_table()?;
+                status.set("phase", phase.name())?;
+                if let Some(problem) = phase.error() {
+                    status.set("error", problem)?;
+                }
+                Ok(status)
+            },
+        );
         methods.add_method_mut("size", |_, screen, ()| screen.size().map_err(raised));
         methods.add_method_mut(
             "line",
