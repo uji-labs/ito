@@ -10,8 +10,6 @@ mod virtual_screen;
 
 use std::io;
 
-#[cfg(not(target_family = "wasm"))]
-use crossterm::event::Event as NativeEvent;
 use event::Event;
 use mlua::{AnyUserData, Lua, Table};
 use tokio::sync::{mpsc, watch};
@@ -41,16 +39,10 @@ pub struct VirtualHandle {
 }
 
 impl VirtualHandle {
-    #[cfg(not(target_family = "wasm"))]
-    pub fn send(&self, event: NativeEvent) -> bool {
+    pub fn send(&self, event: event::Incoming) -> bool {
         event::incoming(event).map_or(!self.events.is_closed(), |event| {
             self.events.send(event).is_ok()
         })
-    }
-
-    #[cfg(target_family = "wasm")]
-    pub fn send(&self, event: Event) -> bool {
-        self.events.send(event).is_ok()
     }
 
     pub fn resize(&self, width: u16, height: u16) -> bool {

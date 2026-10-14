@@ -13,6 +13,7 @@ use tokio::sync::mpsc;
 use super::event::Event;
 use super::surface::{Cursor, Shape, Surface};
 use super::{Input, Screen, Terminal};
+use crate::image::kitty::Images;
 
 #[derive(Debug, Serialize)]
 pub struct Cell {
@@ -63,11 +64,13 @@ struct Canvas<F> {
     present: F,
 }
 
+// The 16 ANSI colours every terminal agrees on.
 const PALETTE: [u32; 16] = [
     0x00_00_00, 0x80_00_00, 0x00_80_00, 0x80_80_00, 0x00_00_80, 0x80_00_80, 0x00_80_80, 0xc0_c0_c0,
     0x80_80_80, 0xff_00_00, 0x00_ff_00, 0xff_ff_00, 0x00_00_ff, 0xff_00_ff, 0x00_ff_ff, 0xff_ff_ff,
 ];
 
+// xterm adds a 6×6×6 cube and 24 greys above those.
 fn indexed(index: u8) -> u32 {
     match index {
         0..=15 => PALETTE[usize::from(index)],
@@ -76,7 +79,10 @@ fn indexed(index: u8) -> u32 {
             let level = |value| if value == 0 { 0 } else { 55 + value * 40 };
             (level(index / 36) << 16) | (level(index / 6 % 6) << 8) | level(index % 6)
         }
-        _ => u32::from(8 + (index - 232) * 10) * 0x01_01_01,
+        grey => {
+            let level = u32::from(8 + (grey - 232) * 10);
+            level * 0x01_01_01
+        }
     }
 }
 
@@ -107,6 +113,22 @@ fn color(color: Color) -> Option<String> {
     Some(format!("#{rgb:06x}"))
 }
 
+fn modifiers(cell: &ratatui::buffer::Cell) -> Vec<&'static str> {
+    [
+        ("bold", Modifier::BOLD),
+        ("dim", Modifier::DIM),
+        ("italic", Modifier::ITALIC),
+        ("underline", Modifier::UNDERLINED),
+        ("reverse", Modifier::REVERSED),
+        ("strikethrough", Modifier::CROSSED_OUT),
+        ("hidden", Modifier::HIDDEN),
+        ("blink", Modifier::SLOW_BLINK | Modifier::RAPID_BLINK),
+    ]
+    .into_iter()
+    .filter_map(|(name, flag)| cell.modifier.intersects(flag).then_some(name))
+    .collect()
+}
+
 fn snapshot(buffer: &Buffer, cursor: Option<Cursor>) -> Frame {
     let mut cells = Vec::new();
     for row in 0..buffer.area.height {
@@ -122,19 +144,7 @@ fn snapshot(buffer: &Buffer, cursor: Option<Cursor>) -> Frame {
                 text: text.to_string(),
                 fg: color(cell.fg),
                 bg: color(cell.bg),
-                modifiers: [
-                    ("bold", Modifier::BOLD),
-                    ("dim", Modifier::DIM),
-                    ("italic", Modifier::ITALIC),
-                    ("underline", Modifier::UNDERLINED),
-                    ("reverse", Modifier::REVERSED),
-                    ("strikethrough", Modifier::CROSSED_OUT),
-                    ("hidden", Modifier::HIDDEN),
-                    ("blink", Modifier::SLOW_BLINK | Modifier::RAPID_BLINK),
-                ]
-                .into_iter()
-                .filter_map(|(name, flag)| cell.modifier.intersects(flag).then_some(name))
-                .collect(),
+                modifiers: modifiers(cell),
                 link: link.map(str::to_string),
             });
             col += width;
@@ -170,8 +180,15 @@ impl<F: FnMut(Frame) -> io::Result<()>> Surface for Canvas<F> {
         Ok((width, height))
     }
 
-    fn present(&mut self, cursor: Option<Cursor>) -> io::Result<()> {
+    fn present(&mut self, cursor: Option<Cursor>, images: &mut Images) -> io::Result<()> {
+        // Cells are all a Canvas can paint, so kitty images are dropped instead
+        // of uploaded. Their placeholder cells read as blank.
+        images.reset(&mut io::sink())?;
         (self.present)(snapshot(&self.buffer, cursor))
+    }
+
+    fn reset_images(&mut self, images: &mut Images) -> io::Result<()> {
+        images.reset(&mut io::sink())
     }
 
     fn write(&mut self, _bytes: &[u8]) -> io::Result<()> {

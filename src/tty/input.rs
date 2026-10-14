@@ -2,6 +2,8 @@
 mod reader;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) use reader::Reader;
+
+/// A browser has no crossterm reader thread to keep alive.
 #[cfg(target_family = "wasm")]
 pub(crate) type Reader = ();
 
@@ -14,17 +16,14 @@ use tokio::sync::{Mutex, mpsc};
 
 pub struct Input {
     events: Mutex<mpsc::UnboundedReceiver<Event>>,
-    #[cfg(not(target_family = "wasm"))]
+    /// Keeps the crossterm reader thread alive while the handle exists.
     _reader: Option<Reader>,
 }
 
 impl Input {
     pub(crate) fn new(events: mpsc::UnboundedReceiver<Event>, reader: Option<Reader>) -> Self {
-        #[cfg(target_family = "wasm")]
-        let _ = reader;
         Self {
             events: Mutex::new(events),
-            #[cfg(not(target_family = "wasm"))]
             _reader: reader,
         }
     }

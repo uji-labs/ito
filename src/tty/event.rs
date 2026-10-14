@@ -1,8 +1,14 @@
 #[cfg(not(target_family = "wasm"))]
 use crossterm::event::{
-    Event as NativeEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
-    MouseEventKind,
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
+
+/// What a host hands to a terminal. A browser sends the same event tables the
+/// Lua side reads; natively it is a crossterm event, which `incoming` narrows.
+#[cfg(target_family = "wasm")]
+pub use self::Event as Incoming;
+#[cfg(not(target_family = "wasm"))]
+pub use crossterm::event::Event as Incoming;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -132,13 +138,18 @@ fn mouse(mouse: MouseEvent) -> Event {
 }
 
 #[cfg(not(target_family = "wasm"))]
-pub(crate) fn incoming(event: NativeEvent) -> Option<Event> {
+pub(crate) fn incoming(event: Incoming) -> Option<Event> {
     match event {
-        NativeEvent::Key(pressed) => key(pressed),
-        NativeEvent::Mouse(moved) => Some(mouse(moved)),
-        NativeEvent::Paste(text) => Some(Event::Paste { text }),
-        NativeEvent::Resize(width, height) => Some(Event::Resize { width, height }),
-        NativeEvent::FocusGained => Some(Event::Focus { focused: true }),
-        NativeEvent::FocusLost => Some(Event::Focus { focused: false }),
+        Incoming::Key(pressed) => key(pressed),
+        Incoming::Mouse(moved) => Some(mouse(moved)),
+        Incoming::Paste(text) => Some(Event::Paste { text }),
+        Incoming::Resize(width, height) => Some(Event::Resize { width, height }),
+        Incoming::FocusGained => Some(Event::Focus { focused: true }),
+        Incoming::FocusLost => Some(Event::Focus { focused: false }),
     }
+}
+
+#[cfg(target_family = "wasm")]
+pub(crate) fn incoming(event: Incoming) -> Option<Event> {
+    Some(event)
 }

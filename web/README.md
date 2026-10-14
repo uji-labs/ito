@@ -105,12 +105,14 @@ through both the terminal test host and compiled browser runtime.
 
 ## Checks
 
+`just check` runs the Lua specs, three clippy passes, the Canvas integration
+test, and the browser host's own tests. It needs `luajit`, `stylua`, `luacheck`,
+and `selene` on `PATH`.
+
+The Wasm build itself is only built by hand, since it needs Emscripten:
+
 ```sh
-cargo test -p ito --features canvas,lua54,vendored --test canvas
-cargo test -p ito-web
-cargo clippy -p ito --all-targets --features canvas,lua54,vendored -- -D warnings
-cargo clippy -p ito-web -- -D warnings
-just test
+just web
 ```
 
 With the demo served and Playwright installed, `node web/smoke.mjs` checks the
