@@ -4,7 +4,7 @@ version = "0.1.5"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
-description = "A declarative terminal UI kit in Lua, shipped as embeddable source"
+description = "A declarative UI library for Lua"
 build = "build.rs"
 include = ["Cargo.toml", "build.rs", "src/**/*.rs", "lua/ito/**/*.lua", "LICENSE", "README.md", "examples/**/*.lua"]
 

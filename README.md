@@ -1,6 +1,6 @@
 # Ito
 
-A declarative terminal UI kit in Lua, shipped as embeddable Rust source and a native Lua module.
+A declarative UI library for Lua.
 
 Heavily inspired by SwiftUI.
 
