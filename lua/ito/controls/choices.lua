@@ -123,6 +123,10 @@ end
 
 function Choices:handle(chord)
     if self:writing() then
+        if chord.type == "paste" then
+            self:answer():insert(text.single_line(chord.text))
+            return true
+        end
         if typing.typed(chord) then
             self:answer():insert(chord.key)
             return true

@@ -1,6 +1,5 @@
 local class = require("ito.class")
 local layout = require("ito.layout")
-local plain = require("ito.style.text_style").plain
 local View = require("ito.view")
 
 local function overlap(a, b)
@@ -21,6 +20,7 @@ function Frame:init(screen, ctx)
     self.screen = screen
     self.ctx = ctx
     self.focusables = {}
+    self.key_handlers = {}
     self.scrollables = {}
 end
 
@@ -57,8 +57,23 @@ function Frame:shows(rect)
     return rect.x < clip.x + clip.width and clip.x < rect.x + rect.width and rect.y < clip.y + clip.height and clip.y < rect.y + rect.height
 end
 
-function Frame:focusable(target, handle, wanted)
-    self.focusables[#self.focusables + 1] = { target = target, handle = handle, wanted = wanted, scope = self.scope }
+function Frame:focusable(target, handle, wanted, view)
+    local rect = view and view:surface()
+    if rect then
+        local width, height = self.screen:size()
+        rect = self:clipped(overlap(rect, layout.rect(0, 0, width, height)))
+        if rect.width <= 0 or rect.height <= 0 then
+            return
+        end
+    end
+    self.focusables[#self.focusables + 1] = {
+        target = target,
+        handle = handle,
+        wanted = wanted,
+        scope = self.scope,
+        view = view,
+        rect = rect,
+    }
 end
 
 function Frame:scrollable(rect, target, state, priority)
@@ -105,27 +120,23 @@ function Frame:chrome(view)
         return
     end
     local style = view.border_style or self.ctx.styles.border
-    local painted = self:clipped(rect)
-    if style ~= plain and painted.width > 0 and painted.height > 0 then
-        self.screen:paint(painted, style)
-    end
     local bottom = rect.y + rect.height - 1
     local across = view.edges == View.Edges.horizontal
     if across then
         local rule = string.rep(set.horizontal, rect.width)
-        self:put(rect.y, rect.x, rule, rect.width)
+        self:put(rect.y, rect.x, { { rule, style } }, rect.width)
         if bottom > rect.y then
-            self:put(bottom, rect.x, rule, rect.width)
+            self:put(bottom, rect.x, { { rule, style } }, rect.width)
         end
     else
         local rule = string.rep(set.horizontal, math.max(rect.width - 2, 0))
-        self:put(rect.y, rect.x, set.top_left .. rule .. set.top_right, rect.width)
+        self:put(rect.y, rect.x, { { set.top_left .. rule .. set.top_right, style } }, rect.width)
         for row = rect.y + 1, bottom - 1 do
-            self:put(row, rect.x, set.vertical, 1)
-            self:put(row, rect.x + rect.width - 1, set.vertical, 1)
+            self:put(row, rect.x, { { set.vertical, style } }, 1)
+            self:put(row, rect.x + rect.width - 1, { { set.vertical, style } }, 1)
         end
         if bottom > rect.y then
-            self:put(bottom, rect.x, set.bottom_left .. rule .. set.bottom_right, rect.width)
+            self:put(bottom, rect.x, { { set.bottom_left .. rule .. set.bottom_right, style } }, rect.width)
         end
     end
     if view.heading then

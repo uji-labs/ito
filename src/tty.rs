@@ -1,4 +1,8 @@
+#[cfg(feature = "canvas")]
+pub mod canvas;
+pub mod event;
 mod input;
+#[cfg(not(target_family = "wasm"))]
 mod real;
 mod screen;
 mod surface;
@@ -6,7 +10,7 @@ mod virtual_screen;
 
 use std::io;
 
-use crossterm::event::Event;
+use event::Event;
 use mlua::{AnyUserData, Lua, Table};
 use tokio::sync::{mpsc, watch};
 
@@ -16,6 +20,7 @@ pub use screen::Screen;
 const OPENED: &str = "ito.terminal";
 
 pub enum Terminal {
+    #[cfg(not(target_family = "wasm"))]
     Real,
     Virtual(VirtualTerminal),
     Open(Screen, Input),
@@ -34,12 +39,15 @@ pub struct VirtualHandle {
 }
 
 impl VirtualHandle {
-    pub fn send(&self, event: Event) -> bool {
-        self.events.send(event).is_ok()
+    pub fn send(&self, event: event::Incoming) -> bool {
+        event::incoming(event).map_or(!self.events.is_closed(), |event| {
+            self.events.send(event).is_ok()
+        })
     }
 
     pub fn resize(&self, width: u16, height: u16) -> bool {
-        self.size.send((width, height)).is_ok() && self.send(Event::Resize(width, height))
+        self.size.send((width, height)).is_ok()
+            && self.events.send(Event::Resize { width, height }).is_ok()
     }
 
     pub fn frame(&self) -> Vec<String> {
@@ -71,6 +79,7 @@ pub fn virtual_terminal(width: u16, height: u16) -> (VirtualTerminal, VirtualHan
 
 pub fn open(terminal: Terminal) -> io::Result<(Screen, Input)> {
     match terminal {
+        #[cfg(not(target_family = "wasm"))]
         Terminal::Real => real::open(),
         Terminal::Virtual(terminal) => Ok(virtual_screen::open(terminal)),
         Terminal::Open(screen, input) => Ok((screen, input)),
@@ -102,7 +111,13 @@ fn handles(lua: &Lua, (): ()) -> mlua::Result<(AnyUserData, AnyUserData)> {
     if let Some(handles) = opened(lua)? {
         return Ok(handles);
     }
-    let terminal = lua.remove_app_data::<Terminal>().unwrap_or(Terminal::Real);
+    let terminal = lua.remove_app_data::<Terminal>();
+    #[cfg(not(target_family = "wasm"))]
+    let terminal = terminal.unwrap_or(Terminal::Real);
+    #[cfg(target_family = "wasm")]
+    let terminal = terminal.ok_or_else(|| {
+        mlua::Error::runtime("provide a Canvas terminal before calling ito.open()")
+    })?;
     let (screen, input) = open(terminal).map_err(mlua::Error::external)?;
     let handles = (lua.create_userdata(screen)?, lua.create_userdata(input)?);
     lua.set_named_registry_value(OPENED, [handles.0.clone(), handles.1.clone()])?;
@@ -123,5 +138,6 @@ pub(crate) fn module(lua: &Lua) -> mlua::Result<Table> {
 }
 
 pub fn restore() {
+    #[cfg(not(target_family = "wasm"))]
     real::restore();
 }

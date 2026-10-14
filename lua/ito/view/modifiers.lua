@@ -17,6 +17,25 @@ local EDGES = { "top_left", "top_right", "bottom_left", "bottom_right", "horizon
 local SIDES = { "top", "bottom", "leading", "trailing" }
 
 return function(View)
+    function View:focused(wanted)
+        self.wanted = wanted ~= false
+        return self
+    end
+
+    function View:on_key(handler)
+        assert(type(handler) == "function", "on_key takes a function")
+        self.key_handler = handler
+        return self
+    end
+
+    function View:accessibility_label(text)
+        if type(text) ~= "string" then
+            error("accessibility_label takes a string", 2)
+        end
+        self.accessible_name = text
+        return self
+    end
+
     function View:padding(amount)
         self.inset = nil
         local sides = (self.fill ~= nil or self.edge ~= nil) and "margin" or "pad"
@@ -86,6 +105,23 @@ return function(View)
 
     function View:invisible(hide)
         self.is_invisible = hide ~= false
+        return self
+    end
+
+    function View:disabled(off)
+        self.is_disabled = off ~= false
+        return self
+    end
+
+    function View:on_change(handler)
+        assert(type(handler) == "function", "on_change takes a function")
+        self.changed = handler
+        return self
+    end
+
+    function View:label(caption)
+        assert(type(caption) == "string", "label takes a string")
+        self.caption = caption
         return self
     end
 

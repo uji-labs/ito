@@ -68,6 +68,11 @@ function M.trim(text)
     return text:match("^%s*(.-)%s*$")
 end
 
+-- Pasted text arrives with newlines; an editor that holds one line flattens it.
+function M.single_line(text)
+    return (text:gsub("[\r\n]+", " "))
+end
+
 function M.lines(source)
     local out = {}
     local at = 1

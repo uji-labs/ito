@@ -14,7 +14,7 @@ local EDITS = {
 local M = {}
 
 function M.typed(chord)
-    return not chord.ctrl and not chord.alt and type(chord.key) == "string" and chord.key:match(SINGLE) ~= nil
+    return not chord.ctrl and not chord.alt and not chord.meta and type(chord.key) == "string" and chord.key:match(SINGLE) ~= nil
 end
 
 function M.edit(line, key)

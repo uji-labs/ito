@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ito · Canvas</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b110e; color: #dce4e1; font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  main { width: min(1040px, 100%); margin: 8vh auto 0; padding: 24px; }
+  header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; }
+  h1 { font: inherit; font-weight: 700; margin: 0; color: #b8e1bd; }
+  header p { margin: 0; color: #7d9387; }
+  canvas { display: block; width: 100%; height: 480px; background: #111916; border-radius: 8px; outline: 1px solid #2b4033; touch-action: none; }
+  canvas:focus-visible { outline: 2px solid #b8e1bd; }
+  #status { min-height: 2em; color: #7d9387; line-height: 1.6; }
+  #status.error { color: #f2a997; white-space: pre-wrap; }
+  @media (max-width: 600px) { main { margin-top: 16px; padding: 16px; } header { display: block; } header p { margin-top: 8px; } canvas { height: 65vh; } }
+</style>
+<main>
+  <header><h1>Ito / Canvas</h1><p>A terminal UI, in your browser.</p></header>
+  <canvas id="ito">This demo needs a browser with Canvas 2D and WebAssembly.</canvas>
+  <p id="status" role="status">Loading…</p>
+</main>
+<script type="module">
+  import { mount } from './canvas.js';
+  const status = document.querySelector('#status');
+  function showError(error) { status.textContent = error.message; status.className = 'error'; }
+  try {
+    const response = await fetch('./demo.lua');
+    if (!response.ok) throw new Error(`Could not load demo: ${response.status}`);
+    window.itoDemo = await mount(document.querySelector('canvas'), await response.text(), { onError: showError });
+    status.textContent = 'Click the canvas to type. Press Enter to submit.';
+    document.documentElement.dataset.ready = 'true';
+  } catch (error) { showError(error); }
+</script>
+</html>
