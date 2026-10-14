@@ -448,7 +448,7 @@ mod tests {
         buffer.reset(); // a later opaque view covered the entire image
         let mut output = Vec::new();
         images.present(&visible_ids(&buffer), &mut output).unwrap();
-        assert!(output.is_empty());
+        assert_eq!(String::from_utf8_lossy(&output), "");
         draw(
             &mut images,
             &mut buffer,
@@ -462,7 +462,7 @@ mod tests {
         assert!(String::from_utf8_lossy(&output).contains("a=T,U=1,f=100,t=d,q=2"));
         output.clear();
         images.present(&visible_ids(&buffer), &mut output).unwrap();
-        assert!(output.is_empty());
+        assert_eq!(String::from_utf8_lossy(&output), "");
     }
 
     #[test]
@@ -505,7 +505,7 @@ mod tests {
         assert!(!deleted.contains("d=A"));
         output.clear();
         images.present(&visible_ids(&buffer), &mut output).unwrap();
-        assert!(!output.is_empty());
+        assert!(String::from_utf8_lossy(&output).contains("a=T,U=1,f=100,t=d,q=2"));
     }
 
     #[test]
@@ -565,7 +565,7 @@ mod tests {
         assert!(images.present(&visible_ids(&buffer), &mut Broken).is_err());
         let mut output = Vec::new();
         images.present(&visible_ids(&buffer), &mut output).unwrap();
-        assert!(!output.is_empty());
+        assert!(String::from_utf8_lossy(&output).contains("a=T,U=1,f=100,t=d,q=2"));
     }
 
     #[test]
