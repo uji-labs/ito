@@ -34,9 +34,18 @@ function Window:draw(root, frame)
     if root then
         root:draw(frame)
     end
+    local previous = self.focus
+    self:settle(frame)
+    -- Focus is known after controls register. Repaint a focus transition so
+    -- only the active control draws its caret/highlight, including frame one.
+    if root and previous ~= self.focus then
+        frame.focusables, frame.scrollables, frame.key_handlers = {}, {}, {}
+        root:draw(frame)
+        self:settle(frame)
+    end
     self.selection:capture_screen(self.screen)
     self:follow(frame)
-    self:settle(frame)
+    self.wake = frame.wake
     return frame
 end
 
@@ -96,10 +105,18 @@ function Window:settle(frame)
             scoped[#scoped + 1] = focusable
         end
     end
-    local found
+    local found, requested = nil, {}
     for _, focusable in ipairs(scoped) do
         if focusable.target == self.focus then
             found = focusable
+        end
+    end
+    for _, focusable in ipairs(scoped) do
+        if focusable.wanted then
+            requested[focusable.target] = true
+            if not (self.requested or {})[focusable.target] then
+                found = focusable
+            end
         end
     end
     if not found then
@@ -113,6 +130,7 @@ function Window:settle(frame)
     found = found or scoped[1]
     self.focus = found and found.target
     self.focused = found and found.handle
+    self.focusables, self.key_handlers, self.requested = scoped, frame.key_handlers, requested
     self.scrollables = frame.scrollables
     self.wake = frame.wake
 end
@@ -122,7 +140,62 @@ function Window:unfocus()
 end
 
 function Window:key(chord)
-    return self.focused ~= nil and self.focused(chord) == true
+    if self.active == false then
+        return false
+    end
+    if self.focused and self.focused(chord) == true then
+        return true
+    end
+    for index = #(self.key_handlers or {}), 1, -1 do
+        local entry = self.key_handlers[index]
+        if entry.scope == self.scope and entry.handle(chord) == true then
+            return true
+        end
+    end
+    if chord.key == "tab" or chord.key == "backtab" then
+        local step = chord.key == "backtab" and -1 or 1
+        for index, entry in ipairs(self.focusables or {}) do
+            if entry.target == self.focus then
+                local next_entry = self.focusables[index + step]
+                if not next_entry then
+                    return false
+                end
+                self.focus, self.focused = next_entry.target, next_entry.handle
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function Window:is_focused(target)
+    return self.active ~= false and self.focus == target
+end
+
+-- Hosts translate platform events once; controls and Lua own their meaning.
+function Window:event(event)
+    if event.type == "key" or event.type == "paste" then
+        return self:key(event)
+    elseif event.type == "focus" then
+        self.active = event.focused
+        return true
+    elseif event.type == "resize" then
+        return true
+    elseif event.type == "mouse" then
+        if event.kind == "down" and event.button == "left" then
+            self:press(event.row, event.col)
+        elseif event.kind == "drag" and event.button == "left" then
+            self:drag(event.row, event.col)
+        elseif event.kind == "up" and event.button == "left" then
+            return true, self:release(event)
+        elseif event.kind == "scroll_up" or event.kind == "scroll_down" then
+            return self:wheel(event.row, event.col, event.kind == "scroll_up" and -3 or 3)
+        else
+            return false
+        end
+        return true
+    end
+    return false
 end
 
 function Window:scrollable_at(row, col)
@@ -149,6 +222,14 @@ function Window:wheel(row, col, rows)
 end
 
 function Window:press(row, col)
+    for index = #(self.focusables or {}), 1, -1 do
+        local entry = self.focusables[index]
+        local rect = entry.rect
+        if rect and row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width then
+            self.focus, self.focused = entry.target, entry.handle
+            break
+        end
+    end
     self.pointer = nil
     self.clicking = self.screen:clicked(row, col)
     self.selection:press(col, row, host.clock())

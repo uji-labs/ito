@@ -214,6 +214,9 @@ function View:draw(frame)
     if self.scoped ~= nil then
         frame.scope = self.scoped
     end
+    if self.key_handler then
+        frame.key_handlers[#frame.key_handlers + 1] = { handle = self.key_handler, scope = frame.scope }
+    end
     if self.opaque_fill then
         frame:clear(self.rect)
     end

@@ -1,8 +1,12 @@
-# Canvas browser build
+# Browser build
 
 Ito's Lua components run inside WebAssembly, with a Canvas 2D renderer for its
 styled cell buffer. The browser owns input, resizing, and frame scheduling.
 The native terminal remains the default on desktop targets.
+
+The sibling website's `/ito` playground uses this same Canvas backend with
+a light host theme. It provides a small terminal host for Lua view functions;
+there is no separate DOM control renderer.
 
 ## Build
 
@@ -65,9 +69,39 @@ ratio. Links open only for HTTP, HTTPS, and mailto destinations.
 This is an initial Canvas backend with complete frame snapshots. It does not
 interpret raw ANSI writes, provide a shell/filesystem host, run LuaJIT, or allow
 blocking `input:read()`. Use the frame callback to keep the browser responsive.
-Canvas does not expose the drawn controls as semantic DOM elements; mobile
-software keyboard integration, a screen-reader view, and clipboard selection
-copying are not implemented. Load trusted application code.
+Canvas does not expose the drawn controls as semantic DOM elements. The
+standalone demo does not include mobile keyboard transport or clipboard
+selection copying; the playground adds text
+input transport and a readable text fallback. Load trusted application code.
+
+## Playground host
+
+`web/playground.lua` runs a returned Ito view function inside a real `Window`.
+It drains input through `Window:event`, runs shared terminal layout and drawing,
+and exposes the cell frame plus focus rectangles to the browser. Browser CSS
+supplies the fixed palette and framing. The original nonblocking Canvas host
+API remains available for applications that own their event loop.
+
+Send `load` with `view: true`, `source`, dimensions, `now`, and a `palette` to
+use the playground host. Subsequent `event`, `resize`, and `frame` requests
+use the ordinary Canvas bridge. Responses contain `frame`, `interaction`,
+`wake`, or `error`. Coordinates and dimensions are terminal cells.
+
+Shared focus supports `:focused(condition)`, pointer activation, Tab/Backtab,
+and scoped controls. TextField adds `:on_cancel(fn)` and accepts paste as one
+edit. `:on_key(fn)` handles keys left unhandled by the active control. Every
+input event is followed by a render so the next event sees the new focus.
+The terminal and browser run the same state transitions. Browser text entry
+uses one transport for mobile keyboards and IME, with the buffer owned by Lua.
+
+Every browser VM has a 64 MiB Lua allocation limit and instruction budget.
+The website runs it in a Worker; invalid edits preserve the accepted VM.
+The playground bounds frames to 160 columns and 120 rows. Its Canvas has a text
+fallback, but does not offer individual native HTML control semantics.
+
+`npm run bundle:ito` in the sibling website copies the compiled runtime,
+Canvas painter, and `web/examples/*.lua`. The input-flow example is exercised
+through both the terminal test host and compiled browser runtime.
 
 ## Checks
 

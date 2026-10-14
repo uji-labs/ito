@@ -27,11 +27,6 @@ function List:on_choose(handler)
     return self
 end
 
-function List:focused()
-    self.wanted = true
-    return self
-end
-
 function List:passive()
     self.inert = true
     return self
@@ -184,7 +179,7 @@ function List:draw_content(frame)
     if not self.inert then
         frame:focusable(self.memo, function(chord)
             return self:handle(chord)
-        end, self.wanted)
+        end, self.wanted, self)
     end
     frame:scrollable(self.inner, self)
 end
