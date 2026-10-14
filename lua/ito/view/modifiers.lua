@@ -108,6 +108,23 @@ return function(View)
         return self
     end
 
+    function View:disabled(off)
+        self.is_disabled = off ~= false
+        return self
+    end
+
+    function View:on_change(handler)
+        assert(type(handler) == "function", "on_change takes a function")
+        self.changed = handler
+        return self
+    end
+
+    function View:label(caption)
+        assert(type(caption) == "string", "label takes a string")
+        self.caption = caption
+        return self
+    end
+
     function View:focus_scope(value)
         if value == nil then
             error("focus_scope needs a value", 2)

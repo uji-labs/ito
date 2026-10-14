@@ -21,18 +21,6 @@ function TextField:placeholder(hint)
     return self
 end
 
-function TextField:label(caption)
-    assert(type(caption) == "string", "label takes a string")
-    self.caption = caption
-    return self
-end
-
-function TextField:on_change(handler)
-    assert(type(handler) == "function", "on_change takes a function")
-    self.changed = handler
-    return self
-end
-
 function TextField:hidden()
     self.masked = true
     return self
