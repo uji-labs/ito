@@ -8,6 +8,19 @@ local View = require("ito.view")
 local TextField = class(View)
 TextField.text_input = true
 
+-- A one-line editor keeps its insertion point in view, so it shows the end of
+-- text longer than the room it has, less the cell the cursor needs.
+local function tail(value, cells)
+    local chars, used = text.chars(value), 0
+    for index = #chars, 1, -1 do
+        used = used + text.width(chars[index])
+        if used >= cells then
+            return table.concat(chars, "", index + 1)
+        end
+    end
+    return value
+end
+
 function TextField:init(value)
     View.init(self, {})
     if type(value) ~= "table" then
@@ -59,16 +72,7 @@ function TextField:draw_content(frame)
             { text = line.text, cursor = line.cursor, hidden = self.masked },
             { text = ctx.styles.input, cursor = ctx.styles.cursor }
         )
-        -- Keep the insertion point visible as a one-line editor gets longer.
-        local chars, width, start = text.chars(spans[1][1]), 0, 1
-        for index = #chars, 1, -1 do
-            width = width + text.width(chars[index])
-            if width >= self.inner.width then
-                start = index + 1
-                break
-            end
-        end
-        spans[1][1] = table.concat(chars, "", start)
+        spans[1][1] = tail(spans[1][1], self.inner.width)
     else
         local shown = self.masked and string.rep(ctx.symbols.mask, text.length(line.text)) or line.text
         spans = { { shown, ctx.styles.input } }
@@ -91,7 +95,7 @@ function TextField:handle(chord)
     local line = self:field()
     local previous = line.text
     if chord.type == "paste" then
-        line:insert((chord.text:gsub("[\r\n]+", " ")))
+        line:insert(text.single_line(chord.text))
     elseif chord.key == "esc" and self.cancel then
         self.cancel(line.text)
         return true

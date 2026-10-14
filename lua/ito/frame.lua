@@ -61,10 +61,7 @@ function Frame:focusable(target, handle, wanted, view)
     local rect = view and view:surface()
     if rect then
         local width, height = self.screen:size()
-        rect = overlap(rect, layout.rect(0, 0, width, height))
-        if self.clipping then
-            rect = overlap(rect, self.clipping)
-        end
+        rect = self:clipped(overlap(rect, layout.rect(0, 0, width, height)))
         if rect.width <= 0 or rect.height <= 0 then
             return
         end

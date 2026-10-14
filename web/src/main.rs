@@ -50,6 +50,13 @@ struct Response {
     error: Option<String>,
 }
 
+/// How the loaded source draws: a plain app that owns its event loop, or a view
+/// function that the playground host runs inside a `Window`.
+enum Mode {
+    App,
+    Playground(serde_json::Value),
+}
+
 struct Runtime {
     draw: Function,
     handle: canvas::Handle,
@@ -62,18 +69,7 @@ struct Runtime {
 }
 
 impl Runtime {
-    fn new(source: &str, width: u16, height: u16, now: f64) -> mlua::Result<Self> {
-        Self::open(source, width, height, now, false, serde_json::json!({}))
-    }
-
-    fn open(
-        source: &str,
-        width: u16,
-        height: u16,
-        now: f64,
-        view: bool,
-        palette: serde_json::Value,
-    ) -> mlua::Result<Self> {
+    fn open(source: &str, width: u16, height: u16, now: f64, mode: Mode) -> mlua::Result<Self> {
         let lua = Lua::new();
         lua.set_memory_limit(64 * 1024 * 1024)?;
         let budget = Rc::new(Cell::new(0));
@@ -115,24 +111,24 @@ impl Runtime {
         host.get::<Function>("setup")?.call::<()>(opts)?;
         let draw: Function = lua
             .load(source)
-            .set_name(if view {
-                "@playground.lua"
-            } else {
-                "@canvas-app.lua"
+            .set_name(match mode {
+                Mode::App => "@canvas-app.lua",
+                Mode::Playground(_) => "@playground.lua",
             })
             .eval()?;
-        let (draw, info) = if view {
-            let host: Function = lua
-                .load(include_str!("../playground.lua"))
-                .set_name("@playground-host.lua")
-                .eval()?;
-            let app: Table = host.call((draw, lua.to_value(&palette)?))?;
-            (
-                app.get::<Function>("draw")?,
-                Some(app.get::<Function>("info")?),
-            )
-        } else {
-            (draw, None)
+        let (draw, info) = match mode {
+            Mode::App => (draw, None),
+            Mode::Playground(palette) => {
+                let host: Function = lua
+                    .load(include_str!("../playground.lua"))
+                    .set_name("@playground-host.lua")
+                    .eval()?;
+                let app: Table = host.call((draw, lua.to_value(&palette)?))?;
+                (
+                    app.get::<Function>("draw")?,
+                    Some(app.get::<Function>("info")?),
+                )
+            }
         };
         Ok(Self {
             draw,
@@ -177,51 +173,57 @@ thread_local! {
     static RESPONSE: RefCell<CString> = RefCell::new(CString::default());
 }
 
+/// A frame stays small, however large the browser makes the canvas.
+const MOST: (u16, u16) = (160, 120);
+
+fn bounds(width: u16, height: u16) -> (u16, u16) {
+    let (most_width, most_height) = MOST;
+    (width.clamp(1, most_width), height.clamp(1, most_height))
+}
+
 fn dispatch(request: Request) -> mlua::Result<Response> {
-    RUNTIME.with_borrow_mut(|slot| {
-        if let Request::Load {
+    RUNTIME.with_borrow_mut(|slot| match request {
+        Request::Load {
             source,
             view,
             palette,
             width,
             height,
             now,
-        } = request
-        {
-            let width = width.clamp(1, 160);
-            let height = height.clamp(1, 120);
-            let runtime = if view {
-                Runtime::open(&source, width, height, now, true, palette)?
+        } => {
+            let (width, height) = bounds(width, height);
+            let mode = if view {
+                Mode::Playground(palette)
             } else {
-                Runtime::new(&source, width, height, now)?
+                Mode::App
             };
+            let runtime = Runtime::open(&source, width, height, now, mode)?;
             let response = runtime.render(now)?;
             *slot = Some(runtime);
-            return Ok(response);
+            Ok(response)
         }
-        if matches!(request, Request::Close) {
+        Request::Close => {
             *slot = None;
-            return Ok(Response::default());
+            Ok(Response::default())
         }
-        let runtime = slot
-            .as_ref()
-            .ok_or_else(|| mlua::Error::runtime("load a Canvas app first"))?;
-        let now = match request {
-            Request::Frame { now } => now,
-            Request::Event { event, now } => {
-                runtime.handle.send(event);
-                now
-            }
-            Request::Resize { width, height, now } => {
-                runtime
-                    .handle
-                    .resize(width.clamp(1, 160), height.clamp(1, 120));
-                now
-            }
-            Request::Load { .. } | Request::Close => unreachable!(),
-        };
-        runtime.render(now)
+        Request::Frame { now } => live(slot)?.render(now),
+        Request::Event { event, now } => {
+            let runtime = live(slot)?;
+            runtime.handle.send(event);
+            runtime.render(now)
+        }
+        Request::Resize { width, height, now } => {
+            let runtime = live(slot)?;
+            let (width, height) = bounds(width, height);
+            runtime.handle.resize(width, height);
+            runtime.render(now)
+        }
     })
+}
+
+fn live(slot: &Option<Runtime>) -> mlua::Result<&Runtime> {
+    slot.as_ref()
+        .ok_or_else(|| mlua::Error::runtime("load a Canvas app first"))
 }
 
 /// Called by Emscripten `ccall` with a NUL-terminated JSON string.
@@ -282,16 +284,21 @@ mod tests {
         runtime.render(0.2)
     }
 
+    /// A runtime in playground mode: `source` returns a view function, and the
+    /// fixed host theme stands in for the browser palette.
+    fn playground(source: &str, width: u16, height: u16) -> mlua::Result<Runtime> {
+        Runtime::open(
+            source,
+            width,
+            height,
+            0.0,
+            Mode::Playground(serde_json::json!({})),
+        )
+    }
+
     #[test]
     fn canvas_uses_terminal_focus_and_state_transitions() -> mlua::Result<()> {
-        let runtime = Runtime::open(
-            include_str!("../examples/flow.lua"),
-            48,
-            120,
-            0.0,
-            true,
-            serde_json::json!({}),
-        )?;
+        let runtime = playground(include_str!("../examples/flow.lua"), 48, 120)?;
         assert!(shown(&runtime.render(0.0)?).contains("CHOOSE AN ITEM"));
         runtime.handle.send(Event::Focus { focused: true });
         runtime.render(0.1)?;
@@ -329,7 +336,7 @@ mod tests {
             include_str!("../examples/settings.lua"),
             include_str!("../examples/shop.lua"),
         ] {
-            let runtime = Runtime::open(source, 28, 120, 0.0, true, serde_json::json!({}))?;
+            let runtime = playground(source, 28, 120)?;
             let response = runtime.render(0.0)?;
             let frame = response.frame.unwrap();
             assert!(frame.height > 1 && frame.height < 120);
@@ -345,32 +352,14 @@ mod tests {
 
     #[test]
     fn canvas_stops_endless_scripts() {
-        assert!(
-            Runtime::open(
-                "while true do end",
-                40,
-                20,
-                0.0,
-                true,
-                serde_json::json!({})
-            )
-            .is_err()
-        );
-        let runtime = Runtime::open(
-            "return function() while true do end end",
-            40,
-            20,
-            0.0,
-            true,
-            serde_json::json!({}),
-        )
-        .unwrap();
+        assert!(playground("while true do end", 40, 20).is_err());
+        let runtime = playground("return function() while true do end end", 40, 20).unwrap();
         assert!(runtime.render(0.0).is_err());
     }
 
     #[test]
     fn lua_survives_across_browser_frames_and_input() -> mlua::Result<()> {
-        let runtime = Runtime::new(include_str!("../demo.lua"), 80, 24, 0.0)?;
+        let runtime = Runtime::open(include_str!("../demo.lua"), 80, 24, 0.0, Mode::App)?;
         let first = runtime.render(0.1)?;
         let text = |response: Response| {
             response

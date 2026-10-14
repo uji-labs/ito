@@ -1,4 +1,8 @@
 /** Paint complete Ito cell frames. Layout stays in Lua/Ratatui, in cell coordinates. */
+
+// The Wasm bridge bounds frames to these cells, so never ask for more.
+const MOST = { width: 160, height: 120 };
+
 export class CanvasRenderer {
   constructor(canvas, { fontSize = 16, fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', foreground = '#dce4e1', background = '#111916' } = {}) {
     this.canvas = canvas;
@@ -14,8 +18,8 @@ export class CanvasRenderer {
   size() {
     const bounds = this.canvas.getBoundingClientRect();
     return {
-      width: Math.max(1, Math.min(512, Math.floor(bounds.width / this.cellWidth))),
-      height: Math.max(1, Math.min(256, Math.floor(bounds.height / this.cellHeight))),
+      width: Math.max(1, Math.min(MOST.width, Math.floor(bounds.width / this.cellWidth))),
+      height: Math.max(1, Math.min(MOST.height, Math.floor(bounds.height / this.cellHeight))),
     };
   }
 

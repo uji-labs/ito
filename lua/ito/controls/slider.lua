@@ -1,22 +1,18 @@
 local class = require("ito.class")
+local validate = require("ito.validate")
 local View = require("ito.view")
-
-local function number(value, name)
-    assert(type(value) == "number" and value == value and math.abs(value) < math.huge, name .. " must be a finite number")
-    return value
-end
 
 local Slider = class(View)
 
 function Slider:init(value, opts)
     View.init(self, {})
     assert(type(value) == "table", "Slider takes a number state")
-    number(value.value, "Slider state")
+    validate.finite(value.value, "Slider state")
     opts = opts or {}
     self.value = value
-    self.minimum = number(opts.min or 0, "Slider min")
-    self.maximum = number(opts.max or 100, "Slider max")
-    self.step = number(opts.step or 1, "Slider step")
+    self.minimum = validate.finite(opts.min or 0, "Slider min")
+    self.maximum = validate.finite(opts.max or 100, "Slider max")
+    self.step = validate.finite(opts.step or 1, "Slider step")
     assert(self.maximum > self.minimum and self.step > 0, "Slider needs max above min and a positive step")
 end
 
@@ -30,7 +26,7 @@ function Slider:set(value)
     if self.is_disabled then
         return
     end
-    value = number(value, "Slider value")
+    value = validate.finite(value, "Slider value")
     local steps = math.floor((value - self.minimum) / self.step + 0.5)
     self.value.value = math.max(self.minimum, math.min(self.maximum, self.minimum + steps * self.step))
     if self.changed then

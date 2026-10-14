@@ -83,6 +83,10 @@ local function past(pane, row, height)
     return 0
 end
 
+local function inside(rect, row, col)
+    return row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width
+end
+
 function Window:follow(frame)
     local pointer, selection = self.pointer, self.selection
     local pane = selection.range and selection.pane
@@ -105,34 +109,25 @@ function Window:settle(frame)
             scoped[#scoped + 1] = focusable
         end
     end
-    local found, requested = nil, {}
+    local held, asked, first = nil, nil, nil
+    local before, requested = self.requested or {}, {}
     for _, focusable in ipairs(scoped) do
         if focusable.target == self.focus then
-            found = focusable
+            held = focusable
         end
-    end
-    for _, focusable in ipairs(scoped) do
         if focusable.wanted then
+            first = first or focusable
             requested[focusable.target] = true
-            if not (self.requested or {})[focusable.target] then
-                found = focusable
+            if not before[focusable.target] then
+                asked = focusable
             end
         end
     end
-    if not found then
-        for _, focusable in ipairs(scoped) do
-            if focusable.wanted then
-                found = focusable
-                break
-            end
-        end
-    end
-    found = found or scoped[1]
+    local found = asked or held or first or scoped[1]
     self.focus = found and found.target
     self.focused = found and found.handle
     self.focusables, self.key_handlers, self.requested = scoped, frame.key_handlers, requested
     self.scrollables = frame.scrollables
-    self.wake = frame.wake
 end
 
 function Window:unfocus()
@@ -202,8 +197,7 @@ function Window:scrollable_at(row, col)
     local found
     for index = #self.scrollables, 1, -1 do
         local entry = self.scrollables[index]
-        local rect = entry.rect
-        if entry.scope == self.scope and row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width then
+        if entry.scope == self.scope and inside(entry.rect, row, col) then
             if not found or entry.priority > found.priority then
                 found = entry
             end
@@ -224,8 +218,7 @@ end
 function Window:press(row, col)
     for index = #(self.focusables or {}), 1, -1 do
         local entry = self.focusables[index]
-        local rect = entry.rect
-        if rect and row >= rect.y and row < rect.y + rect.height and col >= rect.x and col < rect.x + rect.width then
+        if entry.rect and inside(entry.rect, row, col) then
             self.focus, self.focused = entry.target, entry.handle
             break
         end

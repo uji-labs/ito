@@ -67,23 +67,7 @@ return function()
         if not event then
             break
         end
-        if event.type == "key" then
-            window:key(event)
-        elseif event.type == "paste" then
-            for char in event.text:gmatch(ito.text.CHAR) do
-                window:key({ key = char, ctrl = false, alt = false, shift = false })
-            end
-        elseif event.type == "mouse" then
-            if event.kind == "down" and event.button == "left" then
-                window:press(event.row, event.col)
-            elseif event.kind == "drag" and event.button == "left" then
-                window:drag(event.row, event.col)
-            elseif event.kind == "up" and event.button == "left" then
-                window:release(event)
-            elseif event.kind == "scroll_up" or event.kind == "scroll_down" then
-                window:wheel(event.row, event.col, event.kind == "scroll_up" and -3 or 3)
-            end
-        end
+        window:event(event)
     end
     screen:clear()
     window:render(build(), themes:context())

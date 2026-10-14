@@ -15,7 +15,8 @@ export async function mount(canvas, source, options = {}) {
   const renderer = new CanvasRenderer(canvas, options);
   const module = await createIto({ printErr: message => console.error(message) });
   const listeners = new AbortController();
-  let timer, blinking, animation, disposed = false, pressed, blinkTimer;
+  let disposed = false;
+  let timer, blinking, animation, pressed, blinkTimer;
   let size = renderer.size();
   const onError = options.onError ?? (error => console.error(error));
 

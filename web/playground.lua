@@ -59,9 +59,11 @@ return function(draw, palette)
         screen:clear()
         local root, frame = window:place(ito.VStack({ build() }), themes:context())
         local width, height = screen:size()
+        -- A page whose only child grows fills the screen; every other page is
+        -- as tall as the content it drew.
         local content = root.composed and root.composed[1]
-        local measured = content and (content.weight or content.fraction) and height or root:measure(frame, width)
-        info.height = math.max(1, math.min(height, measured))
+        local wanted = content and (content.weight or content.fraction) and height or root:measure(frame, width)
+        info.height = math.max(1, math.min(height, wanted))
         window:draw(root, frame)
         screen:flush()
         info.targets, info.focus, info.scrollables = {}, nil, {}

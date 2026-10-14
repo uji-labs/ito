@@ -1,17 +1,13 @@
 local class = require("ito.class")
 local layout = require("ito.layout")
+local validate = require("ito.validate")
 local View = require("ito.view")
-
-local function number(value, name)
-    assert(type(value) == "number" and value == value and math.abs(value) < math.huge, name .. " must be a finite number")
-    return value
-end
 
 local Progress = class(View)
 
 function Progress:init(value)
     View.init(self, {})
-    self.value = math.max(0, math.min(1, number(value, "Progress")))
+    self.value = math.max(0, math.min(1, validate.finite(value, "Progress")))
 end
 
 function Progress:content_height()
