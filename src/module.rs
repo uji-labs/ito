@@ -27,7 +27,7 @@ pub fn load(lua: &Lua) -> mlua::Result<Value> {
     }
     preload.set(TERMINAL, lua.create_function(|lua, ()| tty::module(lua))?)?;
     preload.set(
-        "ito.image_native",
+        "ito.image.native",
         lua.create_function(|lua, ()| image::module(lua))?,
     )?;
     let root: Function = root.ok_or_else(|| mlua::Error::runtime("ito has no init.lua"))?;

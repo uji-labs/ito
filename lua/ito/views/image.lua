@@ -1,36 +1,15 @@
 local class = require("ito.class")
 local image = require("ito.image")
-local native = require("ito.image_native")
+local native = require("ito.image.native")
 local runtime = require("ito.runtime")
 local Text = require("ito.views.text")
+local validate = require("ito.validate")
 local View = require("ito.view")
+
+local SIDE = 8192
 
 local Image = class(View)
 Image.live = true
-
-local function number(value, low, high, name)
-    if type(value) ~= "number" or value ~= value or value < low or value > high then
-        error(name .. " must be a number between " .. low .. " and " .. high, 3)
-    end
-    return value
-end
-
-local function whole(value, low, name)
-    number(value, low, 8192, name)
-    if value % 1 ~= 0 then
-        error(name .. " must be a whole number of pixels", 3)
-    end
-    return value
-end
-
-local function choice(value, values, name)
-    for _, option in pairs(values) do
-        if value == option then
-            return value
-        end
-    end
-    error(name .. " needs one of the image options", 3)
-end
 
 function Image:init(source)
     View.init(self, {})
@@ -46,7 +25,7 @@ function Image:init(source)
 end
 
 function Image:content_mode(mode)
-    self.mode = choice(mode, image.ImageMode, "content_mode")
+    self.mode = validate.choice(mode, image.ImageMode, "content_mode")
     return self
 end
 
@@ -56,7 +35,7 @@ function Image:content_alignment(alignment)
 end
 
 function Image:sampling(value)
-    self.filter = choice(value, image.ImageSampling, "sampling")
+    self.filter = validate.choice(value, image.ImageSampling, "sampling")
     return self
 end
 
@@ -65,10 +44,10 @@ function Image:crop(rect)
         self.cropped = nil
     elseif type(rect) == "table" then
         self.cropped = {
-            x = whole(rect.x, 0, "crop x"),
-            y = whole(rect.y, 0, "crop y"),
-            width = whole(rect.width, 1, "crop width"),
-            height = whole(rect.height, 1, "crop height"),
+            x = validate.whole(rect.x, 0, SIDE, "crop x"),
+            y = validate.whole(rect.y, 0, SIDE, "crop y"),
+            width = validate.whole(rect.width, 1, SIDE, "crop width"),
+            height = validate.whole(rect.height, 1, SIDE, "crop height"),
         }
     else
         error("crop takes a rectangle in source pixels", 2)
@@ -77,7 +56,7 @@ function Image:crop(rect)
 end
 
 function Image:rotate(degrees)
-    number(degrees, -360000, 360000, "rotation")
+    validate.number(degrees, -360000, 360000, "rotation")
     if degrees % 90 ~= 0 then
         error("rotation must be a multiple of 90 degrees", 2)
     end
@@ -86,7 +65,7 @@ function Image:rotate(degrees)
 end
 
 function Image:opacity(value)
-    self.alpha = number(value, 0, 1, "opacity")
+    self.alpha = validate.number(value, 0, 1, "opacity")
     return self
 end
 
@@ -160,11 +139,11 @@ local Fallback = runtime.view(function(props)
     return props.build(props.status)
 end)
 
-function Image:draw_fallback(frame, phase, problem)
+function Image:draw_fallback(frame, status)
     local content
-    if phase == "loading" then
+    if status.phase == "loading" then
         content = self.loading_view
-    elseif phase == "unsupported" then
+    elseif status.phase == "unsupported" then
         content = self.unsupported_view or self.failed_view
     else
         content = self.failed_view
@@ -172,7 +151,8 @@ function Image:draw_fallback(frame, phase, problem)
     if not content then
         content = Text(self.description)
     elseif type(content) == "function" then
-        content = Fallback({ build = content, status = { phase = phase, error = problem, source = self.source } })
+        status.source = self.source
+        content = Fallback({ build = content, status = status })
     end
     local child = self.composition:place(content, self.node, "image fallback", self.environment)
     if child then
@@ -188,32 +168,29 @@ function Image:draw_content(frame)
     if not frame:shows(inner) then
         return
     end
-    local clip = frame.clipping and frame.overlap(frame.clipping, inner) or inner
+    local clip = frame:clipped(inner)
     local options = self:options()
-    local phase, problem = frame.screen:image(self.source, inner, options, clip)
+    local status = frame.screen:image(self.source, inner, options, clip)
     local previous = self.memo.ready_image
     local kept = false
-    if phase == "ready" then
+    if status.phase == "ready" then
         self.memo.ready_image = { source = self.source, width = inner.width, height = inner.height, options = options }
     elseif
-        phase == "loading"
+        status.phase == "loading"
         and previous
         and previous.source == self.source
         and previous.width == inner.width
         and previous.height == inner.height
     then
-        kept = frame.screen:image(self.source, inner, previous.options, clip, true) == "ready"
+        kept = frame.screen:image(self.source, inner, previous.options, clip, true).phase == "ready"
     end
-    if phase ~= "ready" and not kept then
-        self:draw_fallback(frame, phase, problem)
+    if status.phase ~= "ready" and not kept then
+        self:draw_fallback(frame, status)
     end
-    if phase == "loading" then
+    if status.phase == "loading" then
         frame:again(1 / 30)
     end
     self.node:sweep(self.composition.generation)
 end
-
-Image.number = number
-Image.choice = choice
 
 return Image

@@ -86,47 +86,66 @@ pub(crate) struct Encoded {
     pub height: u32,
 }
 
+const MEGAPIXELS: u64 = 4 * 1024 * 1024;
+
+fn checked(width: u32, height: u32) -> Result<(), String> {
+    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > MEGAPIXELS {
+        return Err("image placement exceeds 4 megapixels".into());
+    }
+    Ok(())
+}
+
+// The pixel size a placement of this many cells is prepared at.
+pub(super) fn placement(
+    cols: u16,
+    rows: u16,
+    cell_width: u16,
+    cell_height: u16,
+) -> Result<(u32, u32), String> {
+    let width = u32::from(cols) * u32::from(cell_width);
+    let height = u32::from(rows) * u32::from(cell_height);
+    checked(width, height)?;
+    Ok((width, height))
+}
+
 pub(crate) struct Prepared(Arc<OnceLock<Result<Encoded, String>>>);
 
+fn encode(image: &RgbaImage, width: u32, height: u32) -> Result<Encoded, String> {
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(
+            image.as_raw(),
+            width,
+            height,
+            image::ExtendedColorType::Rgba8,
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(Encoded { png, width, height })
+}
+
 impl Prepared {
+    // `None` means the work could not start yet: the source is still decoding,
+    // or the worker queue is full. Ask again on a later frame.
     pub(crate) fn new(
         source: &Source,
         options: Options,
         width: u32,
         height: u32,
-    ) -> Result<Self, String> {
+    ) -> Result<Option<Self>, String> {
         options.validate()?;
-        if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 4 * 1024 * 1024 {
-            return Err("image placement exceeds 4 megapixels".into());
-        }
+        checked(width, height)?;
         let Some(Ok(pixels)) = source.pixels() else {
-            return Err("image is not ready".into());
+            return Ok(None);
         };
         let pixels = Arc::clone(pixels);
-        let result = Arc::new(OnceLock::new());
-        let weak = Arc::downgrade(&result);
-        worker::submit(Box::new(move || {
-            if weak.strong_count() == 0 {
-                return;
-            }
-            let encoded = render(&pixels, &options, width, height).and_then(|image| {
-                let mut png = Vec::new();
-                image::codecs::png::PngEncoder::new(&mut png)
-                    .write_image(
-                        image.as_raw(),
-                        width,
-                        height,
-                        image::ExtendedColorType::Rgba8,
-                    )
-                    .map_err(|error| error.to_string())?;
-                Ok(Encoded { png, width, height })
-            });
-            if let Some(slot) = weak.upgrade() {
-                let _ = slot.set(encoded);
-            }
-        }))
-        .map_err(|(error, _)| error)?;
-        Ok(Self(result))
+        let (result, job) = worker::lazy(move || {
+            render(&pixels, &options, width, height).and_then(|image| encode(&image, width, height))
+        });
+        match worker::submit(job) {
+            Ok(()) => Ok(Some(Self(result))),
+            Err((worker::Unavailable::Full, _)) => Ok(None),
+            Err((problem, _)) => Err(problem.to_string()),
+        }
     }
 
     pub(crate) fn get(&self) -> Option<&Result<Encoded, String>> {
@@ -134,20 +153,34 @@ impl Prepared {
     }
 }
 
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn rounded(value: f64) -> u32 {
+    value.round() as u32
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn floored(value: f64) -> u32 {
+    value.floor() as u32
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn channel(value: f64) -> u8 {
+    value.round() as u8
+}
+
+fn byte(value: u16) -> u8 {
+    u8::try_from(value).unwrap_or(u8::MAX)
+}
+
 // Sampling in the destination bounds avoids allocating an enormous intermediate
 // image when a small source is zoomed. Interpolation uses premultiplied alpha.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss
-)]
 fn sample(source: &RgbaImage, x: f64, y: f64, sampling: Sampling) -> Rgba<u8> {
     let x = x.clamp(0.0, f64::from(source.width() - 1));
     let y = y.clamp(0.0, f64::from(source.height() - 1));
     if sampling == Sampling::Nearest {
-        return *source.get_pixel(x.round() as u32, y.round() as u32);
+        return *source.get_pixel(rounded(x), rounded(y));
     }
-    let (left, top) = (x.floor() as u32, y.floor() as u32);
+    let (left, top) = (floored(x), floored(y));
     let (right, bottom) = (
         (left + 1).min(source.width() - 1),
         (top + 1).min(source.height() - 1),
@@ -171,14 +204,13 @@ fn sample(source: &RgbaImage, x: f64, y: f64, sampling: Sampling) -> Rgba<u8> {
         return Rgba([0; 4]);
     }
     Rgba([
-        (channels[0] / channels[3]).round() as u8,
-        (channels[1] / channels[3]).round() as u8,
-        (channels[2] / channels[3]).round() as u8,
-        channels[3].round() as u8,
+        channel(channels[0] / channels[3]),
+        channel(channels[1] / channels[3]),
+        channel(channels[2] / channels[3]),
+        channel(channels[3]),
     ])
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn render(
     source: &RgbaImage,
     opts: &Options,
@@ -247,7 +279,7 @@ fn render(
         let u = u.clamp(0.0, f64::from(crop.width - 1)) + f64::from(crop.x);
         let v = v.clamp(0.0, f64::from(crop.height - 1)) + f64::from(crop.y);
         *pixel = sample(source, u, v, opts.sampling);
-        pixel[3] = ((u16::from(pixel[3]) * u16::from(opts.opacity) + 127) / 255) as u8;
+        pixel[3] = byte((u16::from(pixel[3]) * u16::from(opts.opacity) + 127) / 255);
     }
     Ok(output)
 }

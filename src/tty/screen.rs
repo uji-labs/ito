@@ -15,8 +15,8 @@ pub(crate) use read::row_text;
 
 use crate::convert;
 use crate::image::{
-    Options, Source,
-    kitty::{self, Config, Images, Protocol},
+    Options, Phase, Source,
+    kitty::{self, Config, Images, Protocol, Setup},
 };
 
 use super::surface::{Cursor, Shape, Surface};
@@ -32,7 +32,6 @@ pub struct Screen {
     cursor: Option<Cursor>,
     targets: Targets,
     images: Box<Images>,
-    automatic_cell_size: bool,
 }
 
 impl Screen {
@@ -43,7 +42,6 @@ impl Screen {
             cursor: None,
             targets: Targets::default(),
             images: Box::default(),
-            automatic_cell_size: true,
         }
     }
 
@@ -134,7 +132,7 @@ impl Screen {
 
 impl Screen {
     fn size(&mut self) -> io::Result<(u16, u16)> {
-        if self.automatic_cell_size
+        if self.images.config.auto
             && self.images.config.protocol == Protocol::Kitty
             && let Some((cell_width, cell_height)) = self.surface.cell_size()
         {
@@ -279,6 +277,13 @@ impl Screen {
         images.and(terminal)
     }
 
+    fn setup_images(&mut self, setup: Setup) -> io::Result<()> {
+        self.images
+            .configure(setup.config().map_err(io::Error::other)?)?;
+        self.size()?;
+        Ok(())
+    }
+
     fn image(
         &mut self,
         source: &Source,
@@ -286,42 +291,62 @@ impl Screen {
         options: Options,
         clip: Option<&Area>,
         cached_only: bool,
-    ) -> (String, Option<String>) {
+    ) -> Phase {
         if self.images.config.protocol == Protocol::Off {
-            return ("unsupported".into(), None);
+            return Phase::Unsupported;
         }
         match source.pixels() {
-            None => return ("loading".into(), None),
-            Some(Err(error)) => return ("failed".into(), Some(error.clone())),
+            None => return Phase::Loading,
+            Some(Err(error)) => return Phase::Failed(error.clone()),
             Some(Ok(_)) => {}
         }
         let bounds = self.surface.buffer().area;
+        let placed = match Placement::of(area, clip, bounds) {
+            Err(problem) => return Phase::Failed(problem),
+            Ok(None) => return Phase::Ready,
+            Ok(Some(placed)) => placed,
+        };
+        match self.images.draw(
+            self.surface.buffer(),
+            source,
+            placed.rect,
+            placed.visible,
+            options,
+            cached_only,
+        ) {
+            Ok(true) => {
+                self.targets.record(placed.visible, None);
+                Phase::Ready
+            }
+            Ok(false) => Phase::Loading,
+            Err(problem) => Phase::Failed(problem),
+        }
+    }
+}
+
+// Where an image lands, in cells, and the part of it the screen can show.
+struct Placement {
+    rect: (i64, i64, u16, u16),
+    visible: Rect,
+}
+
+impl Placement {
+    fn of(area: &Area, clip: Option<&Area>, bounds: Rect) -> Result<Option<Self>, String> {
         let visible = area
             .rect()
             .intersection(clip.map_or(bounds, Area::rect))
             .intersection(bounds);
         if visible.is_empty() {
-            return ("ready".into(), None);
+            return Ok(None);
         }
         let (Ok(width), Ok(height)) = (u16::try_from(area.width), u16::try_from(area.height))
         else {
-            return ("failed".into(), Some("invalid image placement size".into()));
+            return Err("invalid image placement size".into());
         };
-        match self.images.draw(
-            self.surface.buffer(),
-            source,
-            (area.x, area.y, width, height),
+        Ok(Some(Self {
+            rect: (area.x, area.y, width, height),
             visible,
-            options,
-            cached_only,
-        ) {
-            Ok(true) => {
-                self.targets.record(visible, None);
-                ("ready".into(), None)
-            }
-            Ok(false) => ("loading".into(), None),
-            Err(error) => ("failed".into(), Some(error)),
-        }
+        }))
     }
 }
 
@@ -338,16 +363,8 @@ fn raised(err: io::Error) -> mlua::Error {
 impl UserData for Screen {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("configure_images", |lua, screen, value: Value| {
-            let config: Config = convert::options(lua, value.clone())?;
-            let supplied = match value {
-                Value::Table(table) => {
-                    table.contains_key("cell_width")? || table.contains_key("cell_height")?
-                }
-                _ => false,
-            };
-            screen.images.configure(config).map_err(raised)?;
-            screen.automatic_cell_size = !supplied;
-            screen.size().map_err(raised)?;
+            let setup: Setup = convert::options(lua, value)?;
+            screen.setup_images(setup).map_err(raised)?;
             Ok(())
         });
         methods.add_method("image_capabilities", |lua, screen, ()| {
@@ -372,13 +389,19 @@ impl UserData for Screen {
                 } else {
                     Some(convert::options(lua, clip)?)
                 };
-                Ok(screen.image(
+                let phase = screen.image(
                     &source,
                     &area,
                     options,
                     clip.as_ref(),
                     cached.unwrap_or(false),
-                ))
+                );
+                let status = lua.create_table()?;
+                status.set("phase", phase.name())?;
+                if let Some(problem) = phase.error() {
+                    status.set("error", problem)?;
+                }
+                Ok(status)
             },
         );
         methods.add_method_mut("size", |_, screen, ()| screen.size().map_err(raised));

@@ -1,4 +1,4 @@
-local native = require("ito.image_native")
+local native = require("ito.image.native")
 
 local function choices(names)
     local values = {}

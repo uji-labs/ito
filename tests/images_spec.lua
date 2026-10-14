@@ -7,12 +7,12 @@ local function source()
 end
 
 local function wait_for(check)
-    local deadline = os.clock() + 3
+    local deadline = os.time() + 3
     repeat
         if check() then
             return
         end
-    until os.clock() > deadline
+    until os.time() >= deadline
     error("image worker did not finish")
 end
 
@@ -63,6 +63,23 @@ describe("images", function()
         assert.equal(1, tapped)
     end)
 
+    it("lets a parent handle a tap over an image", function()
+        local s = screen.new(20, 4)
+        local photo, tapped = source(), 0
+        s:show(function()
+            return ito.VStack({
+                ito.Image(photo):alt("photo"),
+            })
+                :width(10)
+                :height(4)
+                :on_tap(function()
+                    tapped = tapped + 1
+                end)
+        end)
+        s:tap(1, 1)
+        assert.equal(1, tapped)
+    end)
+
     it("keeps image protocol characters out of text and styled snapshots", function()
         local s = tty.virtual(8, 4)
         s:configure_images({ protocol = "kitty", cell_width = 2, cell_height = 2 })
@@ -70,7 +87,7 @@ describe("images", function()
         local area = { x = 0, y = 0, width = 8, height = 4 }
         wait_for(function()
             s:clear()
-            return s:image(photo, area) == "ready"
+            return s:image(photo, area).phase == "ready"
         end)
         s:paint(area, ito.TextStyle({ foreground = ito.Color.red, reverse = true, dim = true }))
         for row = 0, 3 do
@@ -84,7 +101,7 @@ describe("images", function()
         s:suspend()
         s:resume()
         s:clear()
-        assert.equal("ready", s:image(photo, area))
+        assert.equal("ready", s:image(photo, area).phase)
         s:flush()
         s:close()
     end)

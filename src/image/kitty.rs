@@ -12,6 +12,7 @@ use ratatui::style::{Color, Modifier};
 use serde::{Deserialize, Serialize};
 
 use super::diacritics::DIACRITICS;
+use super::transform::{self, Encoded};
 use super::{Options, Prepared, Source};
 
 const PLACEHOLDER: char = '\u{10eeee}';
@@ -32,6 +33,7 @@ pub(crate) struct Config {
     pub protocol: Protocol,
     pub cell_width: u16,
     pub cell_height: u16,
+    pub auto: bool,
     pub tmux: bool,
 }
 
@@ -41,8 +43,46 @@ impl Default for Config {
             protocol: Protocol::Off,
             cell_width: 8,
             cell_height: 16,
+            auto: true,
             tmux: false,
         }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct Setup {
+    protocol: Protocol,
+    cell_width: Option<u16>,
+    cell_height: Option<u16>,
+    tmux: bool,
+}
+
+impl Default for Setup {
+    fn default() -> Self {
+        Self {
+            protocol: Protocol::Off,
+            cell_width: None,
+            cell_height: None,
+            tmux: false,
+        }
+    }
+}
+
+impl Setup {
+    pub(crate) fn config(self) -> Result<Config, String> {
+        let cell = match (self.cell_width, self.cell_height) {
+            (None, None) => None,
+            (Some(width), Some(height)) => Some((width, height)),
+            _ => return Err("cell_width and cell_height go together".into()),
+        };
+        Ok(Config {
+            protocol: self.protocol,
+            cell_width: cell.map_or(Config::default().cell_width, |(width, _)| width),
+            cell_height: cell.map_or(Config::default().cell_height, |(_, height)| height),
+            auto: cell.is_none(),
+            tmux: self.tmux,
+        })
     }
 }
 
@@ -201,11 +241,8 @@ impl Images {
         if usize::from(cols) > DIACRITICS.len() || usize::from(rows) > DIACRITICS.len() {
             return Err("image placements support at most 297 columns and rows".into());
         }
-        let width = u32::from(cols) * u32::from(self.config.cell_width);
-        let height = u32::from(rows) * u32::from(self.config.cell_height);
-        if u64::from(width) * u64::from(height) > 4 * 1024 * 1024 {
-            return Err("image placement exceeds 4 megapixels".into());
-        }
+        let (width, height) =
+            transform::placement(cols, rows, self.config.cell_width, self.config.cell_height)?;
         // Budget decoded output and a conservative PNG encoding bound.
         let cost = u64::from(width) * u64::from(height) * 8 + 1024;
         let key = Key {
@@ -221,9 +258,8 @@ impl Images {
                 return Ok(false);
             }
             self.room(cost)?;
-            let prepared = match Prepared::new(source, key.options, width, height) {
-                Err(error) if error.starts_with("image worker is busy") => return Ok(false),
-                result => result?,
+            let Some(prepared) = Prepared::new(source, key.options, width, height)? else {
+                return Ok(false);
             };
             self.entries.insert(
                 key.clone(),
@@ -342,7 +378,7 @@ fn transmit(
     id: u32,
     cols: u16,
     rows: u16,
-    data: &super::transform::Encoded,
+    data: &Encoded,
     tmux: bool,
 ) -> io::Result<()> {
     let chunks = data.png.chunks(3072);
@@ -373,6 +409,7 @@ mod tests {
                 protocol: Protocol::Kitty,
                 cell_width: 1,
                 cell_height: 1,
+                auto: false,
                 tmux: false,
             },
             ..Images::default()
@@ -510,7 +547,7 @@ mod tests {
 
     #[test]
     fn protocol_chunks_are_bounded_and_preserve_payload() {
-        let data = super::super::transform::Encoded {
+        let data = Encoded {
             png: (0_u8..=255).cycle().take(12000).collect(),
             width: 20,
             height: 10,

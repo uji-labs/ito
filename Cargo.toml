@@ -6,7 +6,7 @@ rust-version = "1.88"
 license = "MIT"
 description = "A declarative terminal UI kit in Lua, shipped as embeddable source"
 build = "build.rs"
-include = ["Cargo.toml", "build.rs", "src/**/*.rs", "lua/ito/**/*.lua", "LICENSE", "README.md", "docs/**/*.md", "examples/**/*.lua"]
+include = ["Cargo.toml", "build.rs", "src/**/*.rs", "lua/ito/**/*.lua", "LICENSE", "README.md", "examples/**/*.lua"]
 
 [lib]
 path = "src/lib.rs"

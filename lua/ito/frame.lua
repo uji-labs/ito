@@ -42,6 +42,10 @@ function Frame:unclip(outer)
     self.clipping = outer
 end
 
+function Frame:clipped(rect)
+    return self.clipping and overlap(self.clipping, rect) or rect
+end
+
 function Frame:shows(rect)
     if rect.width <= 0 or rect.height <= 0 then
         return false
@@ -72,14 +76,14 @@ function Frame:lines(rect, rows)
 end
 
 function Frame:clear(rect)
-    local area = self.clipping and overlap(self.clipping, rect) or rect
+    local area = self:clipped(rect)
     if area.width > 0 and area.height > 0 then
         self.screen:fill(area)
     end
 end
 
 function Frame:fill(rect, style)
-    local painted = self.clipping and overlap(self.clipping, rect) or rect
+    local painted = self:clipped(rect)
     if painted.width > 0 and painted.height > 0 then
         self.screen:paint(painted, style)
     end
@@ -101,7 +105,7 @@ function Frame:chrome(view)
         return
     end
     local style = view.border_style or self.ctx.styles.border
-    local painted = self.clipping and overlap(self.clipping, rect) or rect
+    local painted = self:clipped(rect)
     if style ~= plain and painted.width > 0 and painted.height > 0 then
         self.screen:paint(painted, style)
     end

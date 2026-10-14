@@ -17,7 +17,6 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 type Pixels = Result<Arc<RgbaImage>, String>;
 
-#[derive(Clone)]
 pub(crate) struct Source {
     pub(crate) id: u64,
     pixels: Arc<OnceLock<Pixels>>,
@@ -58,26 +57,21 @@ fn decode(data: &[u8]) -> Result<RgbaImage, String> {
 }
 
 impl Source {
-    fn new() -> Self {
+    fn with(pixels: Arc<OnceLock<Pixels>>, pending: Option<worker::Job>) -> Self {
         Self {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-            pixels: Arc::new(OnceLock::new()),
-            pending: Rc::new(RefCell::new(None)),
+            pixels,
+            pending: Rc::new(RefCell::new(pending)),
         }
     }
 
+    fn new() -> Self {
+        Self::with(Arc::new(OnceLock::new()), None)
+    }
+
     fn loading(load: impl FnOnce() -> Result<RgbaImage, String> + Send + 'static) -> Self {
-        let source = Self::new();
-        let weak = Arc::downgrade(&source.pixels);
-        *source.pending.borrow_mut() = Some(Box::new(move || {
-            if weak.strong_count() == 0 {
-                return;
-            }
-            let result = load().map(Arc::new);
-            if let Some(slot) = weak.upgrade() {
-                let _ = slot.set(result);
-            }
-        }));
+        let (pixels, job) = worker::lazy(move || load().map(Arc::new));
+        let source = Self::with(pixels, Some(job));
         source.start();
         source
     }
@@ -86,11 +80,12 @@ impl Source {
         let Some(job) = self.pending.borrow_mut().take() else {
             return;
         };
-        if let Err((error, job)) = worker::submit(job) {
-            if error == "image worker is busy" {
-                *self.pending.borrow_mut() = Some(job);
-            } else {
-                let _ = self.pixels.set(Err(error));
+        if let Err((problem, job)) = worker::submit(job) {
+            match problem {
+                worker::Unavailable::Full => *self.pending.borrow_mut() = Some(job),
+                problem => {
+                    let _ = self.pixels.set(Err(problem.to_string()));
+                }
             }
         }
     }

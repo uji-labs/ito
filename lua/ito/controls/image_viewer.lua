@@ -2,6 +2,7 @@ local class = require("ito.class")
 local Image = require("ito.views.image")
 local ImageViewport = require("ito.controls.image_viewport")
 local ImageWheel = require("ito.image").ImageWheel
+local validate = require("ito.validate")
 
 local Viewer = class(Image)
 
@@ -19,7 +20,7 @@ function Viewer:focused()
 end
 
 function Viewer:wheel(policy)
-    self.wheel_policy = Image.choice(policy, ImageWheel, "wheel")
+    self.wheel_policy = validate.choice(policy, ImageWheel, "wheel")
     return self
 end
 
@@ -41,9 +42,9 @@ end
 
 function Viewer:options()
     local options, viewport = Image.options(self), self:position()
-    options.zoom = math.floor(Image.number(viewport.zoom, 0.1, 64, "zoom") * 1000 + 0.5)
-    options.pan_x = math.floor(Image.number(viewport.x, -1, 1, "pan x") * 1000 + 0.5)
-    options.pan_y = math.floor(Image.number(viewport.y, -1, 1, "pan y") * 1000 + 0.5)
+    options.zoom = math.floor(validate.number(viewport.zoom, 0.1, 64, "zoom") * 1000 + 0.5)
+    options.pan_x = math.floor(validate.number(viewport.x, -1, 1, "pan x") * 1000 + 0.5)
+    options.pan_y = math.floor(validate.number(viewport.y, -1, 1, "pan y") * 1000 + 0.5)
     return options
 end
 
@@ -85,13 +86,15 @@ function Viewer:scroll(rows)
         viewport:zoom_by(1.1 ^ -math.max(-30, math.min(30, rows)))
     elseif self.wheel_policy == ImageWheel.pan then
         viewport:pan_by(0, rows * 0.05)
+    else
+        return
     end
     self:notify()
 end
 
 function Viewer:draw_content(frame)
     Image.draw_content(self, frame)
-    local clip = frame.clipping and frame.overlap(frame.clipping, self.inner) or self.inner
+    local clip = frame:clipped(self.inner)
     if not frame:shows(clip) then
         return
     end

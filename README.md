@@ -2,31 +2,44 @@
 
 A declarative terminal UI kit in Lua, shipped as embeddable Rust source and a native Lua module.
 
-Views compose through stacks, grids, custom layouts, and modifiers. Images use the same layout and interaction conventions as text.
+Heavily inspired by SwiftUI.
+
+[Try it in the browser](https://uji.sh/ito/) — an interactive workshop with a live preview.
 
 ```lua
 local ito = require("ito")
-local source = ito.ImageSource.file("photo.jpg")
+local quantity = ito.state(1)
+local wrapped = ito.state(false)
+local ordered = ito.state(false)
+local price = 18
+local gift_wrap = 3
 
-local Photo = ito.view(function(props)
-    return ito.Image(props.source)
-        :content_mode(ito.ImageMode.fit)
-        :alt("Mountain at sunset")
-end)
-
-local content = ito.VStack({
-    ito.Text("Photo"),
-    Photo({ source = source }):height(16):padding(1),
-})
+return function()
+    local total = quantity.value * price + (wrapped.value and gift_wrap or 0)
+    return ito.VStack({
+        ito.Text("FIELD\nNOTES"):bold():padding(1):foreground(ito.rgb(0xfff5de)):background(ito.rgb(0xc65036)):align(ito.Alignment.center),
+        ito.Text("THE SMALL GOODS SHOP"):dim(),
+        ito.HStack({
+            ito.Heading("Room for ideas."):wrap():grow(),
+            ito.Text("$" .. price):bold(),
+        }):spacing(1),
+        ito.Text("A pocket notebook. For things you don't want to forget."):dim():wrap(),
+        ito.HStack({
+            ito.Button("−", function()
+                quantity.value = math.max(1, quantity.value - 1)
+            end):accessibility_label("Fewer notebooks"),
+            ito.Text(tostring(quantity.value)),
+            ito.Button("+", function()
+                quantity.value = math.min(9, quantity.value + 1)
+            end):accessibility_label("More notebooks"),
+        }):spacing(1),
+        ito.Checkbox("Wrap it as a gift (+$" .. gift_wrap .. ")", wrapped),
+        ito.Button(ordered.value and "Added. Thank you!" or "Add to bag · $" .. total, function()
+            ordered.value = not ordered.value
+        end):reverse(),
+    })
+        :spacing(1)
+        :padding(1)
+        :border(ito.theme().borders.rounded)
+end
 ```
-
-Image graphics are opt-in. Enable Kitty Unicode placeholders on the screen with `screen:configure_images({ protocol = "kitty" })`; otherwise the image shows its text or custom fallback. See [image configuration, resources, and viewer controls](docs/images.md).
-
-To try the interactive image viewer in a compatible terminal:
-
-```sh
-cargo build --release --features module,luajit
-luajit examples/images.lua photo.jpg
-```
-
-`just test` builds the native module and runs the Lua specs. `just check` also runs formatting and lint checks. Rust image tests run with `cargo test --features luajit52,vendored`.
