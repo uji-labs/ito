@@ -254,6 +254,7 @@ impl Screen {
 
     fn flush(&mut self) -> io::Result<()> {
         self.targets.flushed();
+        self.styles.clear();
         let result = self.surface.present(self.cursor, &mut self.images);
         if result.is_err() {
             self.images.invalidate();
