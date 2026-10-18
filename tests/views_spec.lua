@@ -836,6 +836,44 @@ describe("the view controls", function()
         assert.is_true(scroll.following)
     end)
 
+    it("asks for what comes before the first row when it is scrolled up", function()
+        local s = screen.new(10, 3)
+        local items = {}
+        for index = 1, 10 do
+            items[index] = "row " .. index
+        end
+        local scroll = kit.ScrollState({ follow = true })
+        local asked = 0
+        local function show()
+            return s:show(function()
+                return kit.LazyVStack(items, function(item)
+                    return kit.Text(item)
+                end)
+                    :item_id(function(item)
+                        return item
+                    end)
+                    :state(scroll)
+                    :more(function()
+                        asked = asked + 1
+                        items = { "old " .. asked, unpack(items) }
+                    end)
+            end)
+        end
+        show()
+        scroll:scroll(-1)
+        show()
+        assert.equal(0, asked, "scrolling inside the list asks for nothing")
+        scroll:scroll(-20)
+        show()
+        assert.equal(1, asked, "scrolling up at the first row asks for what comes before it")
+        local shown = show()
+        assert.equal("row 1", trimmed(shown[1]), "the row you were on keeps its place")
+        scroll:scroll(-1)
+        shown = show()
+        assert.equal(2, asked, "scrolling up again asks again")
+        assert.equal("old 1", trimmed(shown[1]), "and the row it asked for shows")
+    end)
+
     it("builds only the rows of a group that show, and scrolls through them", function()
         local s = screen.new(10, 3)
         local built = {}

@@ -45,6 +45,14 @@ function LazyVStack:footer(element)
     return self
 end
 
+function LazyVStack:more(load)
+    if type(load) ~= "function" then
+        error("more takes a function that loads the rows before the first one", 2)
+    end
+    self.load = load
+    return self
+end
+
 function LazyVStack:compose(composition, node, environment)
     node.lazy = true
     self.memo, self.node = node.memo, node
@@ -234,6 +242,8 @@ function LazyVStack:distance(frame, from, to, limit)
 end
 
 function LazyVStack:position(frame, room, scroll)
+    local pending = scroll.pending
+    local up = pending < 0 or scroll.topped
     local top = scroll.top
     local previous = top and self:find(top.id, top.index)
     if top and not previous then
@@ -259,7 +269,6 @@ function LazyVStack:position(frame, room, scroll)
     if not index then
         return nil
     end
-    local pending = scroll.pending
     scroll.pending = 0
     if pending < 0 then
         scroll.following = false
@@ -268,6 +277,9 @@ function LazyVStack:position(frame, room, scroll)
     if (pending > 0 or not scroll.following) and self:below(frame, index, sub, offset, room + 1) <= room then
         scroll.following = true
         index, sub, offset = self:from_end(frame, room)
+    end
+    if up and self.load and index == 1 and sub == 1 and offset == 0 then
+        self.load()
     end
     if previous then
         local now = { index = index, sub = sub, offset = offset }
